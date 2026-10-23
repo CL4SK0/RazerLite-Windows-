@@ -111,18 +111,19 @@ def find_font(size, bold=False):
     return ImageFont.load_default()
 
 
-def emblem(draw, cx, cy, r, fill):
-    """Petit emblème générique à trois branches (pas le logo officiel)."""
-    for k in range(3):
-        a = math.radians(90 + k * 120)
-        pts = []
-        for s in range(9):
-            t = s / 8
-            ang = a + t * 1.9
-            rad = r * (0.25 + 0.75 * t)
-            pts.append((cx + math.cos(ang) * rad, cy - math.sin(ang) * rad))
-        draw.line(pts, fill=fill, width=max(1, int(r * 0.26)), joint="curve")
-    draw.ellipse((cx - r * 0.18, cy - r * 0.18, cx + r * 0.18, cy + r * 0.18), fill=fill)
+def logo_mask(size, cx, cy, r):
+    """Masque du symbole RazerLite exact (assets/mark.png), centré en (cx, cy), de rayon r."""
+    from . import logo
+    d = max(4, int(r * 2))
+    alpha = logo.mark(d).getchannel("A").point(lambda v: 0 if v < 110 else min(255, (v - 110) * 3))
+    m = Image.new("L", size, 0)
+    m.paste(alpha, (int(cx - d / 2), int(cy - d / 2)))
+    return m
+
+
+def engrave(base, mask):
+    """Symbole gravé, visible même éteint."""
+    paint(base, (78, 83, 90), mask.point(lambda v: v * 2 // 3))
 
 
 # --- appareils -----------------------------------------------------------------
@@ -279,8 +280,9 @@ def render_mouse(w, h):
     wheel_core = mask_of(size, lambda m: [m.line((P(0.47, 0.10 + 0.12 * (i + 0.5) / 14)[0], P(0, 0.10 + 0.12 * (i + 0.5) / 14)[1],
                                                   P(0.525, 0)[0], P(0, 0.10 + 0.12 * (i + 0.5) / 14)[1]), fill=110, width=SS)
                                                   for i in range(14)])
-    logo_c, logo_r = P(0.515, 0.735), mw * 0.085
-    logo = mask_of(size, lambda m: emblem(m, logo_c[0], logo_c[1], logo_r, 255))
+    logo_c, logo_r = P(0.515, 0.735), mw * 0.10
+    logo = logo_mask(size, logo_c[0], logo_c[1], logo_r)
+    engrave(base, logo)
     # Bande inférieure : bord arrière et flancs bas de la souris
     strip_pts = [p for p in body if p[1] > oy + mh * 0.50]
     strip = mask_of(size, lambda m: m.line(strip_pts, fill=255, width=int(mw * 0.035), joint="curve"))
@@ -427,7 +429,8 @@ def render_keyboard(w, h):
 
 
 def render_headset(w, h):
-    """Kraken V3 HyperSense vu de côté : arceau rembourré, fourche, grande coque ovale éclairée."""
+    """Kraken V3 HyperSense vu de trois quarts : coque gauche ovale avec logo éclairé, arceau rembourré
+    et fourches en alu, micro amovible à gauche, coque droite en retrait."""
     W, H = w * SS, h * SS
     s = min(W / 300, H / 330)
     cx, cy = W / 2, H / 2
@@ -437,42 +440,88 @@ def render_headset(w, h):
     def S(x, y):
         return (cx + x * s, cy + y * s)
 
-    cup_box = (*S(-78, -10), *S(78, 150))
-    shadow = mask_of(size, lambda d: d.ellipse((*S(-74, 0), *S(86, 162)), fill=200))
+    metal, metal_dark = (128, 134, 142, 255), (70, 74, 80, 255)
+    left_box = (*S(-112, -22), *S(8, 132))     # coque gauche (face extérieure, vers nous)
+    right_box = (*S(52, -8), *S(132, 112))     # coque droite (on voit son coussin)
+
+    shadow = mask_of(size, lambda d: [d.ellipse((*S(-104, -6), *S(20, 146)), fill=200),
+                                      d.ellipse((*S(56, 6), *S(140, 124)), fill=140)])
     paint(base, (0, 0, 0), shadow.filter(ImageFilter.GaussianBlur(12 * s)))
     d = ImageDraw.Draw(base)
-    # Arceau : bandeau extérieur + coussin intérieur
-    d.arc((*S(-120, -150), *S(120, 90)), start=200, end=340, fill=(26, 28, 31, 255), width=int(30 * s))
-    d.arc((*S(-104, -134), *S(104, 74)), start=203, end=337, fill=(15, 16, 18, 255), width=int(12 * s))
-    d.arc((*S(-120, -150), *S(120, 90)), start=200, end=340, fill=(60, 64, 70, 255), width=int(2 * s))
-    # Fourche métallique et curseurs de taille
-    for side in (-1, 1):
-        d.line((S(side * 104, -60), S(side * 92, 10)), fill=(105, 110, 118, 255), width=int(7 * s))
-    d.line((S(-92, 10), S(-60, 30)), fill=(105, 110, 118, 255), width=int(6 * s))
-    d.line((S(92, 10), S(60, 30)), fill=(105, 110, 118, 255), width=int(6 * s))
-    # Coussin (vu de côté, dépasse derrière la coque)
-    d.ellipse((*S(-70, -4), *S(92, 156)), fill=(12, 13, 14, 255))
-    # Coque
-    cup_mask = mask_of(size, lambda m: m.ellipse(cup_box, fill=255))
-    shell = gradient(size, (42, 45, 50), (18, 19, 22)).convert("RGBA")
+
+    # Coque droite, en retrait : coussin en simili-cuir vers nous, bord de coque
+    d.ellipse(right_box, fill=(22, 23, 26, 255), outline=(52, 56, 62, 255), width=int(2 * s))
+    d.ellipse((*S(62, 4), *S(126, 102)), fill=(10, 10, 12, 255))
+    d.ellipse((*S(76, 22), *S(114, 86)), fill=(26, 27, 30, 255))  # tissu au centre du coussin
+    # Fourche droite
+    d.arc((*S(44, -18), *S(140, 122)), start=190, end=350, fill=metal_dark, width=int(5 * s))
+    d.line((S(92, -18), S(92, -40)), fill=metal_dark, width=int(6 * s))
+
+    # Arceau : bandeau extérieur + coussin dessous, de la coque gauche à la coque droite
+    outer = spline([S(-52, -62), S(-50, -118), S(-14, -152), S(40, -146), S(80, -110), S(92, -48)], closed=False)
+    inner = spline([S(-30, -60), S(-28, -104), S(-6, -128), S(36, -124), S(64, -96), S(72, -46)], closed=False)
+    band = outer + inner[::-1]
+    band_mask = mask_of(size, lambda m: m.polygon(band, fill=255))
+    band_img = gradient(size, (44, 47, 52), (18, 19, 22)).convert("RGBA")
+    band_img.putalpha(band_mask)
+    base.alpha_composite(band_img)
+    relief(base, band_mask, 8 * s, 0.8)
+    grain(base, band_mask, 6)
+    d = ImageDraw.Draw(base)
+    cushion = spline([S(-36, -62), S(-34, -106), S(-8, -132), S(37, -128), S(68, -98), S(77, -46)], closed=False)
+    d.line(cushion, fill=(12, 12, 14, 255), width=int(9 * s), joint="curve")
+    d.line(outer, fill=(70, 74, 81, 255), width=int(2 * s), joint="curve")
+    # surpiqûre du bandeau
+    stitch = spline([S(-44, -64), S(-42, -114), S(-12, -144), S(39, -138), S(74, -106), S(84, -50)], closed=False)
+    for i in range(0, len(stitch) - 1, 2):
+        d.line((stitch[i], stitch[i + 1]), fill=(58, 61, 67, 255), width=max(1, int(1.2 * s)))
+    # Curseur de taille en alu (gauche)
+    d.rounded_rectangle((*S(-56, -66), *S(-44, -30)), radius=3 * s, fill=metal, outline=metal_dark, width=int(s))
+    for k in range(4):
+        d.line((S(-54, -60 + k * 7), S(-46, -60 + k * 7)), fill=metal_dark, width=max(1, int(s)))
+
+    # Fourche gauche en U autour du haut de la coque
+    d.arc((*S(-122, -32), *S(18, 140)), start=185, end=355, fill=metal, width=int(6 * s))
+    d.arc((*S(-122, -32), *S(18, 140)), start=185, end=355, fill=(170, 176, 184, 255), width=max(1, int(1.5 * s)))
+    for px in (-118, 14):
+        d.ellipse((*S(px - 6, 40), *S(px + 6, 52)), fill=metal_dark)  # pivots
+
+    # Coussin gauche (dépasse derrière la coque)
+    d.ellipse((*S(-100, -14), *S(18, 136)), fill=(11, 11, 13, 255))
+    # Coque gauche
+    cup_mask = mask_of(size, lambda m: m.ellipse(left_box, fill=255))
+    shell = gradient(size, (46, 49, 55), (17, 18, 21)).convert("RGBA")
     shell.putalpha(cup_mask)
     base.alpha_composite(shell)
-    sheen = radial(size, S(-25, 30), (70 * s, 60 * s), 60, 0)
+    sheen = radial(size, S(-72, 20), (60 * s, 70 * s), 70, 0)
     paint(base, (255, 255, 255), ImageChops.multiply(sheen, cup_mask).point(lambda v: v // 4))
-    relief(base, cup_mask, 14 * s, 0.7)
+    relief(base, cup_mask, 14 * s, 0.75)
     grain(base, cup_mask, 6)
     d = ImageDraw.Draw(base)
-    d.ellipse(cup_box, outline=(66, 70, 77, 255), width=int(2 * s))
-    plate = (*S(-48, 22), *S(48, 118))
-    d.ellipse(plate, fill=(16, 17, 19, 255), outline=(48, 52, 58, 255), width=int(2 * s))
-    # Prise micro
-    d.ellipse((*S(-30, 128), *S(-18, 140)), fill=(6, 6, 7, 255))
+    d.ellipse(left_box, outline=(70, 74, 81, 255), width=int(2 * s))
+    plate = (*S(-92, 2), *S(-12, 108))
+    d.ellipse(plate, fill=(21, 22, 25, 255), outline=(44, 47, 53, 255), width=int(2 * s))
 
-    logo_c = S(0, 70)
-    logo = mask_of(size, lambda m: emblem(m, logo_c[0], logo_c[1], 30 * s, 255))
-    ring = mask_of(size, lambda m: m.ellipse(plate, outline=255, width=int(3 * s)))
-    zones = {"Casque": [(logo, 1.0), (logo.filter(ImageFilter.GaussianBlur(8 * s)), 0.9),
-                        (ring, 0.55), (ring.filter(ImageFilter.GaussianBlur(5 * s)), 0.5)]}
+    # Commandes au dos de la coque gauche : molette de volume et bouton micro
+    d.rounded_rectangle((*S(2, 66), *S(12, 92)), radius=4 * s, fill=(26, 28, 31, 255), outline=(8, 8, 9, 255),
+                        width=max(1, int(s)))
+    for k in range(6):
+        d.line((S(3, 69 + k * 4), S(11, 69 + k * 4)), fill=(50, 53, 58, 255), width=max(1, int(s)))
+    d.rounded_rectangle((*S(-2, 98), *S(8, 110)), radius=3 * s, fill=(34, 36, 40, 255), outline=(8, 8, 9, 255),
+                        width=max(1, int(s)))
+
+    # Micro amovible : prise à l'avant bas de la coque, perche souple, capsule
+    boom = spline([S(-100, 104), S(-122, 122), S(-134, 142), S(-128, 158)], closed=False)
+    d.line(boom, fill=(14, 15, 17, 255), width=int(7 * s), joint="curve")
+    d.line(boom, fill=(48, 51, 56, 255), width=max(1, int(1.5 * s)), joint="curve")
+    d.ellipse((*S(-106, 96), *S(-94, 110)), fill=(30, 32, 36, 255), outline=(8, 8, 9, 255), width=max(1, int(s)))
+    d.rounded_rectangle((*S(-138, 150), *S(-116, 164)), radius=6 * s, fill=(20, 21, 24, 255),
+                        outline=(60, 64, 70, 255), width=max(1, int(s)))
+
+    logo_c = S(-52, 55)
+    logo = logo_mask(size, logo_c[0], logo_c[1], 30 * s)
+    engrave(base, logo)
+    zones = {"Casque": [(logo, 1.0), (logo.filter(ImageFilter.GaussianBlur(8 * s)), 0.9)]}
     return finish(base, zones, {}, w, h)
 
 
