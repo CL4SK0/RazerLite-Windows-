@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", ".github", "build", "dist", "venv", ".venv", "__pycache__", "tools"}
-SKIP_FILES = {"RazerLite-pack.zip", "RazerLite.spec"}
+SKIP_FILES = {"RazerLite-pack.zip", "RazerLite.spec", "tests.log", "notes.txt"}
 
 
 def files():

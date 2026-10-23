@@ -4,3 +4,4 @@ dist/
 *.spec
 RazerLite-pack.zip
 razerlite/_build.py
+tests.log
