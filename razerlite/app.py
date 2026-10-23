@@ -573,7 +573,13 @@ class AudioPage(Page):
         if side.get("mode") != "app":
             text = "Casque : retour fait par le Kraken, comme dans Synapse."
         elif self.app.monitor.running:
-            text = f"RazerLite : ta voix est renvoyée dans le casque (délai ≈ {self.app.monitor.latency_ms} ms)."
+            m = self.app.monitor
+            if m.period_ms:
+                text = (f"RazerLite basse latence : délai ≈ {m.latency_ms} ms "
+                        f"(blocs de {m.period_ms:g} ms acceptés par le casque).")
+            else:
+                text = f"RazerLite : délai ≈ {m.latency_ms} ms (mode standard"
+                text += f", basse latence refusée : {m.fallback_reason})." if m.fallback_reason else ")."
         elif self.app.monitor.error:
             text = f"RazerLite : {self.app.monitor.error}"
         else:
@@ -719,7 +725,7 @@ class App(ctk.CTk):
         self.firmware_cache = {}
         self._headset_audio = None
         self._apply_jobs = {}
-        self.monitor = monitor.MicMonitor()
+        self.monitor = monitor.AutoMonitor()
         self.tray = None
         self.low_warned = set()
         self.osd = DpiOsd(self)

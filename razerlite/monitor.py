@@ -162,3 +162,48 @@ class MicMonitor:
                 s.close()
             except Exception:
                 pass
+
+
+class AutoMonitor:
+    """Essaie d'abord le moteur WASAPI direct (lowlat), puis PortAudio si le PC ou le pilote le refuse."""
+
+    def __init__(self):
+        self.engine = None
+        self.error = None
+        self.fallback_reason = None
+
+    @property
+    def running(self):
+        return self.engine is not None and self.engine.running
+
+    @property
+    def latency_ms(self):
+        return self.engine.latency_ms if self.engine else None
+
+    @property
+    def period_ms(self):
+        return getattr(self.engine, "period_ms", None)
+
+    def set_level(self, level):
+        if self.engine:
+            self.engine.set_level(level)
+
+    def start(self, level):
+        if self.running:
+            self.engine.set_level(level)
+            return self.engine.latency_ms
+        self.fallback_reason = None
+        try:
+            from .lowlat import LowLatencyMonitor
+            engine = LowLatencyMonitor()
+            engine.start(level)
+        except Exception as exc:
+            self.fallback_reason = str(exc)
+            engine = MicMonitor()
+            engine.start(level)
+        self.engine = engine
+        return engine.latency_ms
+
+    def stop(self):
+        if self.engine:
+            self.engine.stop()
