@@ -11,7 +11,7 @@ from tkinter import colorchooser, messagebox
 
 import customtkinter as ctk
 
-from . import __version__, instance, logo, profiles, updater
+from . import __version__, audio, instance, logo, profiles, updater
 from . import theme as t
 from .devices import RazerError, find_devices
 from .osd import DpiOsd
@@ -32,7 +32,7 @@ KIND_ICONS = {"mouse": "🖱", "keyboard": "⌨", "headset": "🎧"}
 PAGES = {
     "mouse": ["Éclairage", "Performance", "Molette", "Alimentation"],
     "keyboard": ["Éclairage", "Alimentation"],
-    "headset": ["Éclairage"],
+    "headset": ["Éclairage", "Audio"],
 }
 POLL_LABELS = {125: "125 Hz", 500: "500 Hz", 1000: "1000 Hz"}
 DPI_MIN, DPI_MAX, DPI_STEP = 100, 26000, 50
@@ -487,8 +487,161 @@ class PowerPage(Page):
         self.bar.set(level / 100)
 
 
+# --- Audio (casque) ----------------------------------------------------------------
+
+class AudioPage(Page):
+    """Volumes, retour micro, égaliseurs et suppression de bruit, comme l'onglet Audio/Micro de Synapse."""
+
+    def __init__(self, master, app, device):
+        super().__init__(master, app, device)
+        self.cfg = self.settings.setdefault("audio", {})
+        self.out, self.mic = app.headset_endpoints()
+        self.apo = audio.apo_config_dir()
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent", scrollbar_button_color=t.CARD_HI)
+        scroll.pack(fill="both", expand=True)
+        scroll.columnconfigure((0, 1), weight=1, uniform="audio")
+        self.build_output(scroll)
+        self.build_mic(scroll)
+        self.build_apo_status(scroll)
+
+    # Casque
+    def build_output(self, master):
+        c = card(master)
+        c.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=(0, 12))
+        body = ctk.CTkFrame(c, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=20, pady=18)
+        section(body, "Casque").pack(anchor="w")
+        self.volume_row(body, self.out, "Volume")
+        section(body, "Égaliseur").pack(anchor="w", pady=(18, 0))
+        self.eq_block(body, "eq", audio.HEADSET_PRESETS, "Neutre")
+
+    # Micro
+    def build_mic(self, master):
+        c = card(master)
+        c.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=(0, 12))
+        body = ctk.CTkFrame(c, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=20, pady=18)
+        section(body, "Micro").pack(anchor="w")
+        self.volume_row(body, self.mic, "Sensibilité")
+        side = self.out.sidetone() if self.out else None
+        row = ctk.CTkFrame(body, fg_color="transparent")
+        row.pack(fill="x", pady=(14, 0))
+        ctk.CTkLabel(row, text="Retour micro", font=font(12), text_color=t.TEXT, anchor="w").pack(side="left")
+        if side:
+            value = ctk.CTkLabel(row, text=f"{side.percent()} %", font=font(12, "bold"), text_color=t.TEXT)
+            value.pack(side="right")
+            s = slider(body, 0, 100, lambda v: (side.set_percent(int(v)), value.configure(text=f"{int(v)} %")), 100)
+            s.set(side.percent())
+            s.pack(fill="x", pady=(6, 0))
+        else:
+            ctk.CTkLabel(body, text="Ce casque ne le rend pas réglable depuis Windows.", font=font(11),
+                         text_color=t.MUTED, anchor="w").pack(anchor="w")
+
+        section(body, "Nettoyage de la voix").pack(anchor="w", pady=(18, 4))
+        for key, label, hint in (
+            ("noise", "Suppression de bruit", "Retire clavier, souris, souffle et ventilateur (RNNoise)."),
+            ("highpass", "Coupe les graves parasites", "Enlève les bruits sourds : bureau, pas, vibrations (sous 90 Hz)."),
+        ):
+            sw, var = switch(body, label, None, bool(self.cfg.get(key, False)))
+            sw.configure(command=lambda k=key, v=var: self.set(k, v.get()))
+            sw.pack(anchor="w", pady=(6, 0))
+            if not self.apo:
+                sw.configure(state="disabled")
+            ctk.CTkLabel(body, text=hint, font=font(11), text_color=t.MUTED, wraplength=300, justify="left",
+                         anchor="w").pack(anchor="w", padx=(52, 0))
+        section(body, "Égaliseur du micro").pack(anchor="w", pady=(18, 0))
+        self.eq_block(body, "mic_eq", audio.MIC_PRESETS, "Neutre", bands=False)
+
+    def volume_row(self, master, endpoint, label):
+        row = ctk.CTkFrame(master, fg_color="transparent")
+        row.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(row, text=label, font=font(12), text_color=t.TEXT, anchor="w").pack(side="left")
+        if endpoint is None:
+            ctk.CTkLabel(master, text="Kraken introuvable dans Windows (est-il branché ?)", font=font(11),
+                         text_color=t.MUTED, anchor="w").pack(anchor="w")
+            return
+        sw, var = switch(row, "Muet", None, endpoint.muted())
+        sw.configure(command=lambda: endpoint.set_muted(var.get()))
+        sw.pack(side="right")
+        value = ctk.CTkLabel(row, text=f"{endpoint.volume()} %", font=font(12, "bold"), text_color=t.TEXT)
+        value.pack(side="right", padx=(0, 16))
+        s = slider(master, 0, 100, lambda v: (endpoint.set_volume(int(v)), value.configure(text=f"{int(v)} %")), 100)
+        s.set(endpoint.volume())
+        s.pack(fill="x", pady=(6, 0))
+
+    def eq_block(self, master, key, presets, default, bands=True):
+        current = self.cfg.get(key, default)
+        names = list(presets) + (["Perso"] if bands else [])
+        seg = segmented(master, names, lambda v: self.set_preset(key, presets, v))
+        seg.set(current if current in names else default)
+        seg.pack(anchor="w", pady=(8, 0))
+        if not self.apo:
+            seg.configure(state="disabled")
+        if not bands:
+            return
+        grid = ctk.CTkFrame(master, fg_color="transparent")
+        grid.pack(fill="x", pady=(12, 0))
+        gains = self.gains(key, presets, default)
+        self.band_sliders = []
+        for i, label in enumerate(audio.EQ_LABELS):
+            grid.columnconfigure(i, weight=1)
+            s = ctk.CTkSlider(grid, from_=-12, to=12, number_of_steps=24, orientation="vertical", height=120,
+                              width=16, progress_color=t.ACCENT, button_color=t.TEXT, button_hover_color=t.ACCENT,
+                              fg_color=t.CARD_HI, command=lambda v, n=i: self.set_band(key, seg, n, v))
+            s.set(gains[i])
+            s.grid(row=0, column=i)
+            if not self.apo:
+                s.configure(state="disabled")
+            ctk.CTkLabel(grid, text=label, font=font(10), text_color=t.MUTED).grid(row=1, column=i)
+            self.band_sliders.append(s)
+
+    def gains(self, key, presets, default):
+        name = self.cfg.get(key, default)
+        if name == "Perso":
+            return list(self.cfg.get(key + "_custom", presets[default]))
+        return list(presets.get(name, presets[default]))
+
+    def set_preset(self, key, presets, name):
+        self.cfg[key] = name
+        if name != "Perso" and key == "eq":
+            for s, g in zip(self.band_sliders, presets[name]):
+                s.set(g)
+        self.app.apply_audio(self.device)
+
+    def set_band(self, key, seg, n, value):
+        gains = [round(s.get()) for s in self.band_sliders]
+        self.cfg[key] = "Perso"
+        self.cfg[key + "_custom"] = gains
+        seg.set("Perso")
+        self.app.apply_audio(self.device)
+
+    def set(self, key, value):
+        self.cfg[key] = value
+        self.app.apply_audio(self.device)
+
+    # Equalizer APO
+    def build_apo_status(self, master):
+        c = card(master)
+        c.grid(row=1, column=0, columnspan=2, sticky="ew")
+        body = ctk.CTkFrame(c, fg_color="transparent")
+        body.pack(fill="x", padx=20, pady=16)
+        if self.apo:
+            ctk.CTkLabel(body, text="Égaliseurs et nettoyage de la voix passent par Equalizer APO (installé). "
+                         "Si un réglage ne change rien, ouvre son « Configurator » et coche le Kraken "
+                         "dans « Playback devices » et « Capture devices », puis redémarre le PC.",
+                         font=font(11), text_color=t.MUTED, wraplength=700, justify="left", anchor="w").pack(anchor="w")
+            return
+        ctk.CTkLabel(body, text="Pour l'égaliseur et la suppression de bruit, installe Equalizer APO (gratuit, libre)",
+                     font=font(12, "bold"), text_color=t.TEXT).pack(anchor="w")
+        ctk.CTkLabel(body, text="Pendant l'installation, coche le Kraken dans « Playback devices » (casque) et "
+                     "« Capture devices » (micro), puis redémarre le PC. RazerLite s'occupe ensuite de tout régler.",
+                     font=font(11), text_color=t.MUTED, wraplength=700, justify="left", anchor="w").pack(anchor="w", pady=(4, 10))
+        button(body, "Télécharger Equalizer APO ↗", lambda: webbrowser.open(audio.APO_DOWNLOAD), primary=True,
+               height=32).pack(anchor="w")
+
+
 PAGE_CLASSES = {"Éclairage": LightingPage, "Performance": PerformancePage,
-                "Molette": ScrollPage, "Alimentation": PowerPage}
+                "Molette": ScrollPage, "Alimentation": PowerPage, "Audio": AudioPage}
 
 
 # --- Fenêtre principale -----------------------------------------------------------
@@ -527,6 +680,7 @@ class App(ctk.CTk):
         self.current, self.page_name = None, None
         self.battery_cache = {}
         self.firmware_cache = {}
+        self._headset_audio = None
         self._apply_jobs = {}
         self.tray = None
         self.low_warned = set()
@@ -736,6 +890,62 @@ class App(ctk.CTk):
         for key, value in profiles.DEFAULT_PROFILE[device.kind].items():
             settings.setdefault(key, copy.deepcopy(value))
         return settings
+
+    # --- audio du casque ---
+    def headset_endpoints(self):
+        if self._headset_audio is None:
+            try:
+                self._headset_audio = audio.find_headset()
+            except Exception as exc:
+                self.status(f"Audio du casque inaccessible : {exc}", True)
+                self._headset_audio = (None, None)
+        return self._headset_audio
+
+    def apply_audio(self, device):
+        key = (device.name, "audio")
+        if key in self._apply_jobs:
+            self.after_cancel(self._apply_jobs[key])
+        self._apply_jobs[key] = self.after(250, lambda: self._apply_audio(device, key))
+
+    def _apply_audio(self, device, key):
+        self._apply_jobs.pop(key, None)
+        cfg = self.device_settings(device).setdefault("audio", {})
+        out, mic = self.headset_endpoints()
+        noise_dll = None
+        if cfg.get("noise") and mic is not None:
+            noise_dll = audio.rnnoise_dll(mic.channels())
+            if noise_dll is None:
+                self.status("Téléchargement du filtre anti-bruit RNNoise…")
+
+                def work():
+                    try:
+                        audio.download_rnnoise()
+                    except Exception as exc:
+                        self.from_thread(self.status, f"Téléchargement de RNNoise impossible : {exc}", True)
+                        return
+                    if audio.rnnoise_dll(mic.channels()) is None:
+                        self.from_thread(self.status, "RNNoise téléchargé mais introuvable dans l'archive.", True)
+                        return
+                    self.from_thread(self.apply_audio, device)
+
+                threading.Thread(target=work, daemon=True).start()
+                return
+
+        def gains(k, presets):
+            name = cfg.get(k, "Neutre")
+            return cfg.get(k + "_custom") if name == "Perso" else presets.get(name)
+
+        text = audio.build_config(out.guid if out else None, mic.guid if mic else None,
+                                  gains("eq", audio.HEADSET_PRESETS), gains("mic_eq", audio.MIC_PRESETS),
+                                  noise_dll, bool(cfg.get("highpass")))
+        try:
+            audio.write_apo_config(text)
+            profiles.save(self.cfg)
+            self.status("Réglages audio appliqués.")
+        except PermissionError:
+            self.status("Equalizer APO refuse l'écriture : lance RazerLite une fois en administrateur.", True)
+        except OSError as exc:
+            self.status(f"Réglages audio : {exc}", True)
 
     # --- appareils ---
     def scan(self, apply=False):

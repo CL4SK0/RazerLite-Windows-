@@ -2,3 +2,4 @@ hidapi>=0.14; sys_platform != "win32"
 customtkinter>=5.2
 pystray>=0.19
 pillow>=10
+comtypes>=1.4; sys_platform == "win32"

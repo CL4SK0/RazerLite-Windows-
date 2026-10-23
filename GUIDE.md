@@ -115,6 +115,22 @@ Le numéro de version suit le format `0.5.N`, où N augmente à chaque build.
 
 **Suivi d'OpenRazer.** Chaque lundi, GitHub regarde si le projet OpenRazer a corrigé ou ajouté quelque chose pour la Basilisk V3 Pro, le DeathStalker V2 Pro ou le Kraken V3 HyperSense. Si c'est le cas, une fiche apparaît dans l'onglet **Issues** du dépôt. Transmets-la-moi pour que je l'adapte : la correction t'arrivera ensuite par la mise à jour automatique.
 
+## 8. Audio du casque
+
+L'onglet **Audio** du Kraken règle :
+
+- le volume du casque et la sensibilité du micro, avec la sourdine ;
+- le retour micro, si le casque le rend réglable depuis Windows ;
+- un égaliseur 10 bandes, avec des préréglages proches de ceux de Synapse (Jeu, Film, Musique, Basses+, Voix) ;
+- le nettoyage de la voix :
+  - **Suppression de bruit** retire le clavier, la souris, le souffle et le ventilateur (filtre libre RNNoise, téléchargé automatiquement) ;
+  - **Coupe les graves parasites** enlève les bruits sourds ;
+  - un égaliseur de micro complète le tout.
+
+Les égaliseurs et le nettoyage de la voix passent par **Equalizer APO** (gratuit). Synapse faisait la même chose avec son propre pilote audio. Installe Equalizer APO une fois depuis le bouton de l'onglet Audio. Pendant l'installation, coche le Kraken dans *Playback devices* et dans *Capture devices*, puis redémarre le PC. RazerLite écrit ensuite ses réglages dans `config\razerlite.txt`, sans toucher au reste de ta configuration.
+
+Le THX Spatial Audio de Synapse est un logiciel payant de THX, il n'est pas repris. L'équivalent gratuit de Windows s'appelle **Windows Sonic pour casque** : clic droit sur l'icône du son, puis *Audio spatial*.
+
 ## Logo et polices
 
 Le symbole à trois serpents rappelle à quoi sert le logiciel, sans reprendre le logo officiel : c'est un projet indépendant, sans lien avec Razer. Les polices Michroma et Exo 2 sont libres (licence SIL OFL, voir `razerlite/assets/OFL.txt`).
