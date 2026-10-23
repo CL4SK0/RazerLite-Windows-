@@ -1,0 +1,27 @@
+# Chaque lundi : regarde si OpenRazer a corrigé ou ajouté quelque chose pour nos appareils,
+# et ouvre une fiche (onglet Issues) si c'est le cas.
+name: Suivi OpenRazer
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Nombre de jours à remonter"
+        default: "8"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Vérification
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DAYS: ${{ inputs.days }}
+        run: python3 tools/watch_openrazer.py

@@ -109,6 +109,12 @@ Si tu préfères garder la version Python (`RazerLite.bat`), écris `ton-pseudo/
 
 Le numéro de version suit le format `0.5.N`, où N augmente à chaque build.
 
+## 7. Firmware et suivi d'OpenRazer
+
+**Firmware des appareils.** C'est la seule mise à jour de Synapse qui compte vraiment : elle corrige le sans-fil, l'autonomie ou des bugs, directement dans l'appareil. La version actuelle s'affiche sous le nom de l'appareil, en haut de la fenêtre. Le bouton **Firmware Razer ↗** ouvre la page d'assistance de Razer, qui propose les « Firmware Updater » officiels. Ils fonctionnent sans Synapse. Avant d'en lancer un, quitte RazerLite et branche l'appareil en USB. RazerLite ne flashe jamais de firmware lui-même : une erreur pourrait rendre l'appareil inutilisable.
+
+**Suivi d'OpenRazer.** Chaque lundi, GitHub regarde si le projet OpenRazer a corrigé ou ajouté quelque chose pour la Basilisk V3 Pro, le DeathStalker V2 Pro ou le Kraken V3 HyperSense. Si c'est le cas, une fiche apparaît dans l'onglet **Issues** du dépôt. Transmets-la-moi pour que je l'adapte : la correction t'arrivera ensuite par la mise à jour automatique.
+
 ## Logo et polices
 
 Le symbole à trois serpents rappelle à quoi sert le logiciel, sans reprendre le logo officiel : c'est un projet indépendant, sans lien avec Razer. Les polices Michroma et Exo 2 sont libres (licence SIL OFL, voir `razerlite/assets/OFL.txt`).

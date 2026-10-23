@@ -5,6 +5,8 @@ import queue
 import sys
 import threading
 import tkinter as tk
+import urllib.parse
+import webbrowser
 from tkinter import colorchooser, messagebox
 
 import customtkinter as ctk
@@ -524,6 +526,7 @@ class App(ctk.CTk):
         self.devices, self.items, self.pages = [], [], {}
         self.current, self.page_name = None, None
         self.battery_cache = {}
+        self.firmware_cache = {}
         self._apply_jobs = {}
         self.tray = None
         self.low_warned = set()
@@ -614,6 +617,7 @@ class App(ctk.CTk):
         self.h_battery = ctk.CTkLabel(header, text="", font=font(12, "bold"), corner_radius=12, fg_color=t.CARD_HI,
                                       text_color=t.TEXT, height=28, padx=12)
         self.h_battery.pack(side="right")
+        button(header, "Firmware Razer ↗", self.open_firmware_page, height=28, width=130).pack(side="right", padx=(0, 8))
         self.tabs = segmented(main, ["Éclairage"], self.show_page, height=34)
         self.tabs.grid(row=2, column=0, sticky="w", pady=(16, 14))
         self.content = ctk.CTkFrame(main, fg_color="transparent")
@@ -786,7 +790,8 @@ class App(ctk.CTk):
             item.select(item.device is device)
         wireless = "Sans fil (HyperSpeed)" if device.spec.wireless else "Filaire"
         self.h_title.configure(text=device.name.split(" (")[0])
-        self.h_sub.configure(text=f"{KIND_LABELS[device.kind]} · {wireless}")
+        firmware = self.firmware_version(device)
+        self.h_sub.configure(text=f"{KIND_LABELS[device.kind]} · {wireless}" + (f" · Firmware {firmware}" if firmware else ""))
         self.update_header_battery()
         pages = PAGES[device.kind]
         if "battery" not in device.spec.features:
@@ -796,6 +801,29 @@ class App(ctk.CTk):
         name = self.page_name if self.page_name in pages else pages[0]
         self.tabs.set(name)
         self.show_page(name)
+
+    def firmware_version(self, device):
+        if device.name not in self.firmware_cache:
+            try:
+                version = device.firmware()
+            except (RazerError, OSError):
+                version = None
+            self.firmware_cache[device.name] = version if version and version != "?" else None
+        return self.firmware_cache[device.name]
+
+    def open_firmware_page(self):
+        """Les firmwares se mettent à jour avec les outils officiels de Razer (pas besoin de Synapse)."""
+        model = self.current.name.split(" (")[0] if self.current else "Basilisk V3 Pro"
+        firmware = self.firmware_version(self.current) if self.current else None
+        mine = f"Ta version actuelle : {firmware}.\n\n" if firmware else ""
+        if not messagebox.askokcancel(
+                "Mise à jour du firmware",
+                f"{mine}La page d'assistance Razer va s'ouvrir. Si un « Firmware Updater » plus récent y est proposé "
+                f"pour le {model}, télécharge-le.\n\nAvant de le lancer, quitte RazerLite (icône de la barre des tâches "
+                "> Quitter) et branche l'appareil en USB (avec le dongle pour la souris).", parent=self):
+            return
+        query = urllib.parse.quote(f"{model} firmware updater")
+        webbrowser.open(f"https://mysupport.razer.com/app/answers/list/kw/{query}")
 
     def show_page(self, name):
         self.page_name = name
