@@ -13,8 +13,9 @@ def commit(sha, msg):
 
 class WatchTest(unittest.TestCase):
     def test_matching(self):
-        commits = [commit("a1", "Add Basilisk V3 Pro 35K"), commit("b2", "Fix typo"), commit("c3", "Refactor")]
-        files = {"a1": [], "b2": [{"filename": "README.md", "patch": "+ nothing"}],
+        commits = [commit("a1", "Add Basilisk V3 Pro 35K"), commit("b2", "Add Cobra"), commit("c3", "Refactor")]
+        files = {"a1": [], "b2": [{"filename": "driver/razermouse_driver.c",
+                                   "patch": " case USB_DEVICE_ID_RAZER_BASILISK_V3_PRO_WIRED:\n+ case USB_DEVICE_ID_RAZER_COBRA:"}],
                  "c3": [{"filename": "driver/razerkbd_driver.c", "patch": "+ case USB_DEVICE_ID_RAZER_DEATHSTALKER_V2_PRO_WIRELESS:"}]}
         found = w.matching_commits(commits, lambda sha: {"files": files[sha]})
         self.assertEqual([f["sha"] for f in found], ["a1", "c3"])

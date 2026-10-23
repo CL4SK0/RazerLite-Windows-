@@ -29,7 +29,11 @@ def matching_commits(commits, details):
     found = []
     for c in commits:
         full = details(c["sha"])
-        text = c["commit"]["message"] + "\n" + "\n".join(f.get("patch", "") + f["filename"] for f in full.get("files", []))
+        # seulement les lignes ajoutées ou retirées : les lignes de contexte citent souvent nos appareils
+        # simplement parce qu'ils sont voisins dans les listes d'OpenRazer
+        changed = [line for f in full.get("files", []) for line in f.get("patch", "").splitlines()
+                   if line[:1] in "+-" and not line.startswith(("+++", "---"))]
+        text = c["commit"]["message"] + "\n" + "\n".join(changed)
         hits = sorted({m.group(0).lower().replace("_", " ").replace("-", " ") for m in DEVICES.finditer(text)})
         if hits:
             found.append({"sha": c["sha"], "title": c["commit"]["message"].splitlines()[0],
