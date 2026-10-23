@@ -117,6 +117,7 @@ def cmd_battery(args, devices):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="razerlite", description="Remplaçant léger de Razer Synapse")
     parser.add_argument("--tray", action="store_true", help="applique le profil et démarre dans la barre des tâches")
+    parser.add_argument("--after-update", action="store_true", help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("list", help="liste les appareils reconnus")
     sub.add_parser("diag", help="diagnostic complet (à m'envoyer si ça coince)")
@@ -146,7 +147,7 @@ def main(argv=None):
 
     if not args.cmd:
         from .app import run
-        return run(start_in_tray=args.tray)
+        return run(start_in_tray=args.tray, after_update=args.after_update)
 
     handlers = {"list": cmd_list, "diag": cmd_diag, "apply": cmd_apply, "effect": cmd_effect,
                 "brightness": cmd_brightness, "dpi": cmd_dpi, "poll": cmd_poll, "battery": cmd_battery}

@@ -121,7 +121,7 @@ def _install_exe(info, progress):
         ")\r\n"
         "exit /b 1\r\n"
         ":ok\r\n"
-        'start "" "%EXE%"\r\n'
+        'start "" "%EXE%" --after-update\r\n'
         '(goto) 2>nul & del "%~f0"\r\n',
         encoding="mbcs")
     subprocess.Popen(["cmd", "/c", str(script)], creationflags=NO_WINDOW | DETACHED, close_fds=True)
@@ -137,7 +137,7 @@ def _install_pack(info, progress):
     # les modules nécessaires ont pu changer : on les met à jour discrètement
     subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--quiet", "-r", str(root / "requirements.txt")],
                    creationflags=flags, check=False)
-    subprocess.Popen([sys.executable, str(root / "RazerLite.pyw")], cwd=root, creationflags=flags, close_fds=True)
+    subprocess.Popen([sys.executable, str(root / "RazerLite.pyw"), "--after-update"], cwd=root, creationflags=flags, close_fds=True)
 
 
 def extract_pack(archive, root):

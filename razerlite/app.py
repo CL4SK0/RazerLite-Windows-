@@ -9,7 +9,7 @@ from tkinter import colorchooser, messagebox
 
 import customtkinter as ctk
 
-from . import __version__, logo, profiles, updater
+from . import __version__, instance, logo, profiles, updater
 from . import theme as t
 from .devices import RazerError, find_devices
 from .osd import DpiOsd
@@ -541,6 +541,7 @@ class App(ctk.CTk):
         self.update_info = None
         self._from_threads = queue.SimpleQueue()
         self.after(100, self.run_thread_calls)
+        self.after(700, self.watch_show_requests)
         self.after(4000, self.check_updates)
 
     # --- construction ---
@@ -641,6 +642,11 @@ class App(ctk.CTk):
             fn, args = self._from_threads.get()
             fn(*args)
         self.after(100, self.run_thread_calls)
+
+    def watch_show_requests(self):
+        if instance.show_requested():
+            self.show()
+        self.after(700, self.watch_show_requests)
 
     # --- mises à jour ---
     def check_updates(self, manual=False):
@@ -994,13 +1000,24 @@ class App(ctk.CTk):
 
     def quit_app(self):
         if self.tray:
+            # retirer l'icône tout de suite : si le programme se ferme avant, Windows en garde un fantôme
+            try:
+                self.tray.visible = False
+            except Exception:
+                pass
             self.tray.stop()
         for d in self.devices:
             d.close()
         self.destroy()
 
 
-def run(start_in_tray=False):
+def run(start_in_tray=False, after_update=False):
+    # Après une mise à jour, l'ancienne copie est en train de se fermer : on lui laisse le temps.
+    lock = instance.acquire(wait=20 if after_update else 0)
+    if lock is None:
+        instance.ask_existing_to_show()
+        return 0
+    instance.show_requested()  # efface une vieille demande restée en plan
     if sys.platform == "win32":
         # Identité propre : la barre des tâches n'affiche plus RazerLite comme « Python » avec son icône
         try:
