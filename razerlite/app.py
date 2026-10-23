@@ -553,6 +553,7 @@ class AudioPage(Page):
         for key, label, hint in (
             ("noise", "Suppression de bruit", "Retire clavier, souris, souffle et ventilateur (RNNoise)."),
             ("highpass", "Coupe les graves parasites", "Enlève les bruits sourds : bureau, pas, vibrations (sous 90 Hz)."),
+            ("declick", "Atténue les clics", "Adoucit le claquement sec des touches et de la souris (au-dessus de 8 kHz)."),
         ):
             sw, var = switch(body, label, None, bool(self.cfg.get(key, False)))
             sw.configure(command=lambda k=key, v=var: self.set(k, v.get()))
@@ -563,6 +564,24 @@ class AudioPage(Page):
                          anchor="w").pack(anchor="w", padx=(52, 0))
         section(body, "Égaliseur du micro").pack(anchor="w", pady=(18, 0))
         self.eq_block(body, "mic_eq", audio.MIC_PRESETS, "Neutre", bands=False)
+
+        row = ctk.CTkFrame(body, fg_color="transparent")
+        row.pack(fill="x", pady=(14, 0))
+        ctk.CTkLabel(row, text="Volume de la voix", font=font(12), text_color=t.TEXT, anchor="w").pack(side="left")
+        self.gain_value = ctk.CTkLabel(row, text=f"+{self.cfg.get('mic_gain', 0)} dB", font=font(12, "bold"),
+                                       text_color=t.TEXT)
+        self.gain_value.pack(side="right")
+        self.gain_slider = slider(body, 0, audio.MIC_GAIN_MAX, self.set_mic_gain, audio.MIC_GAIN_MAX)
+        self.gain_slider.set(self.cfg.get("mic_gain", 0))
+        self.gain_slider.pack(fill="x", pady=(6, 0))
+        rec = button(body, "Réglage conseillé", self.recommended)
+        rec.pack(anchor="w", pady=(12, 0))
+        if not self.apo:
+            self.gain_slider.configure(state="disabled")
+            rec.configure(state="disabled")
+        ctk.CTkLabel(body, text="Voix plus forte, clavier et souris retirés. Le volume est ajouté après le nettoyage, "
+                     "donc les clics ne remontent pas avec.", font=font(11), text_color=t.MUTED, wraplength=320,
+                     justify="left", anchor="w").pack(anchor="w", pady=(4, 0))
 
     def set_sidetone_mode(self, label):
         self.cfg.setdefault("sidetone", {"on": False, "level": 50})["mode"] = SIDETONE_MODES[label]
@@ -662,6 +681,16 @@ class AudioPage(Page):
         self.cfg[key] = value
         self.app.apply_audio(self.device)
 
+    def set_mic_gain(self, value):
+        self.cfg["mic_gain"] = int(round(value))
+        self.gain_value.configure(text=f"+{self.cfg['mic_gain']} dB")
+        self.app.apply_audio(self.device)
+
+    def recommended(self):
+        self.cfg.update(audio.MIC_RECOMMENDED)
+        self.app.apply_audio(self.device)
+        self.app.after(0, self.app.show_page, "Audio")  # recharge la page pour afficher les nouveaux réglages
+
     # Equalizer APO
     def build_apo_status(self, master):
         c = card(master)
@@ -670,14 +699,15 @@ class AudioPage(Page):
         body.pack(fill="x", padx=20, pady=16)
         if self.apo:
             ctk.CTkLabel(body, text="Égaliseurs et nettoyage de la voix passent par Equalizer APO (installé). "
-                         "Si un réglage ne change rien, ouvre son « Configurator » et coche le Kraken "
-                         "dans « Playback devices » et « Capture devices », puis redémarre le PC.",
+                         "Si un réglage du micro ne change rien, ouvre « Equalizer APO Device Selector » et coche le micro "
+                         "du Kraken dans « Capture devices », puis redémarre le PC. Ne coche pas la sortie du Kraken "
+                         "(« Playback devices ») : avec les effets THX du pilote Razer, elle coupe tout le son.",
                          font=font(11), text_color=t.MUTED, wraplength=700, justify="left", anchor="w").pack(anchor="w")
             return
         ctk.CTkLabel(body, text="Pour l'égaliseur et la suppression de bruit, installe Equalizer APO (gratuit, libre)",
                      font=font(12, "bold"), text_color=t.TEXT).pack(anchor="w")
-        ctk.CTkLabel(body, text="Pendant l'installation, coche le Kraken dans « Playback devices » (casque) et "
-                     "« Capture devices » (micro), puis redémarre le PC. RazerLite s'occupe ensuite de tout régler.",
+        ctk.CTkLabel(body, text="Pendant l'installation, coche seulement le micro du Kraken dans « Capture devices », puis redémarre "
+                     "le PC. Ne coche pas sa sortie (« Playback devices ») : avec THX, elle coupe tout le son.",
                      font=font(11), text_color=t.MUTED, wraplength=700, justify="left", anchor="w").pack(anchor="w", pady=(4, 10))
         button(body, "Télécharger Equalizer APO ↗", lambda: webbrowser.open(audio.APO_DOWNLOAD), primary=True,
                height=32).pack(anchor="w")
@@ -1003,7 +1033,8 @@ class App(ctk.CTk):
 
         text = audio.build_config(out.guid if out else None, mic.guid if mic else None,
                                   gains("eq", audio.HEADSET_PRESETS), gains("mic_eq", audio.MIC_PRESETS),
-                                  noise_dll, bool(cfg.get("highpass")))
+                                  noise_dll, bool(cfg.get("highpass")), cfg.get("mic_gain", 0),
+                                  bool(cfg.get("declick")))
         try:
             audio.write_apo_config(text)
             profiles.save(self.cfg)

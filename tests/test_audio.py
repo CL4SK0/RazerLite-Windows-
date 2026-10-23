@@ -19,6 +19,22 @@ class AudioConfigTest(unittest.TestCase):
         self.assertIn('Device: {mic}\nFilter: ON HP Fc 90 Hz\nVSTPlugin: Library "C:\\x\\rnnoise_mono.dll"', text)
         self.assertTrue(text.rstrip().endswith("Device: all"))
 
+    def test_mic_chain_order(self):
+        text = audio.build_config(None, "{mic}", None, audio.MIC_PRESETS["Voix forte"], r"C:\x\rnnoise_mono.dll",
+                                  True, 6, True)
+        mic = text.split("Device: {mic}\n")[1].split("\n\n")[0].splitlines()
+        self.assertEqual(mic[0], "Filter: ON HP Fc 90 Hz")
+        self.assertTrue(mic[1].startswith("VSTPlugin:"))
+        self.assertEqual(mic[-2:], ["Filter: ON LPQ Fc 8000 Hz Q 0.7", "Preamp: 6 dB"])  # volume en dernier
+
+    def test_mic_gain_is_capped(self):
+        self.assertIn("Preamp: 12 dB", audio.build_config(None, "{mic}", None, None, None, False, 40))
+
+    def test_default_apo_lines_disabled(self):
+        text = audio.disable_default_lines("Preamp: -6 dB\nInclude: example.txt\nInclude: razerlite.txt\n")
+        self.assertEqual(text, "# (désactivé par RazerLite) Preamp: -6 dB\n"
+                               "# (désactivé par RazerLite) Include: example.txt\nInclude: razerlite.txt\n")
+
     def test_flat_writes_nothing(self):
         text = audio.build_config("{out}", "{mic}", audio.HEADSET_PRESETS["Neutre"], None, None, False)
         self.assertNotIn("{out}", text)

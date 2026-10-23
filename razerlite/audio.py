@@ -37,7 +37,17 @@ MIC_PRESETS = {
     "Voix claire": (-12, -8, -3, 0, 0, 1, 3, 3, 1, -2),
     "Voix chaude": (-10, -4, 2, 2, 1, 0, 0, 1, 0, -3),
     "Radio": (-12, -12, -6, 0, 2, 3, 4, 2, -4, -10),
+    # présence (2–4 kHz) pour l'intelligibilité, aigus coupés là où claquent les touches
+    "Voix forte": (-12, -8, -3, -1, 0, 1, 3, 4, 0, -8),
 }
+MIC_GAIN_MAX = 12  # dB ajoutés après le nettoyage
+
+# Réglage conseillé pour le micro : voix plus forte, clavier et souris retirés
+MIC_RECOMMENDED = {"noise": True, "highpass": True, "declick": True, "mic_eq": "Voix forte", "mic_gain": 6}
+
+# Lignes du config.txt livré avec Equalizer APO : -6 dB et l'exemple d'égaliseur s'appliquent à TOUS
+# les périphériques, micro compris (voix plus faible). RazerLite les met en commentaire.
+APO_DEFAULT_LINES = ("preamp: -6 db", "include: example.txt")
 
 
 # --- Core Audio (Windows) ----------------------------------------------------------
@@ -236,12 +246,17 @@ def graphic_eq(gains):
 
 
 def build_config(headset_guid=None, mic_guid=None, headset_eq=None, mic_eq=None, noise_dll=None,
-                 mic_highpass=False):
-    """Texte du fichier razerlite.txt lu par Equalizer APO."""
+                 mic_highpass=False, mic_gain=0, declick=False):
+    """Texte du fichier razerlite.txt lu par Equalizer APO.
+
+    Ordre de la chaîne micro : graves parasites → suppression de bruit → égaliseur → anti-clics → volume.
+    Le volume vient en dernier pour que RNNoise travaille sur le son d'origine.
+    """
     lines = ["# Fichier géré par RazerLite : il est réécrit à chaque changement dans l'appli.", ""]
     if headset_guid and headset_eq and any(headset_eq):
         lines += [f"Device: {headset_guid}", f"Preamp: {-max(0, max(headset_eq)):g} dB", graphic_eq(headset_eq), ""]
-    if mic_guid and (noise_dll or mic_highpass or (mic_eq and any(mic_eq))):
+    mic_gain = max(0, min(MIC_GAIN_MAX, mic_gain or 0))
+    if mic_guid and (noise_dll or mic_highpass or declick or mic_gain or (mic_eq and any(mic_eq))):
         lines.append(f"Device: {mic_guid}")
         if mic_highpass:
             lines.append("Filter: ON HP Fc 90 Hz")
@@ -249,6 +264,10 @@ def build_config(headset_guid=None, mic_guid=None, headset_eq=None, mic_eq=None,
             lines.append(f'VSTPlugin: Library "{noise_dll}"')
         if mic_eq and any(mic_eq):
             lines += [f"Preamp: {-max(0, max(mic_eq)):g} dB", graphic_eq(mic_eq)]
+        if declick:
+            lines.append("Filter: ON LPQ Fc 8000 Hz Q 0.7")
+        if mic_gain:
+            lines.append(f"Preamp: {mic_gain:g} dB")
         lines.append("")
     lines.append("Device: all")
     return "\n".join(lines) + "\n"
@@ -262,5 +281,18 @@ def write_apo_config(text):
     (folder / "razerlite.txt").write_text(text, encoding="utf-8")
     main = folder / "config.txt"
     current = main.read_text(encoding="utf-8", errors="replace") if main.exists() else ""
-    if "include: razerlite.txt" not in current.lower():
-        main.write_text(current.rstrip("\n") + ("\n" if current else "") + "Include: razerlite.txt\n", encoding="utf-8")
+    updated = disable_default_lines(current)
+    if "include: razerlite.txt" not in updated.lower():
+        updated = updated.rstrip("\n") + ("\n" if updated else "") + "Include: razerlite.txt\n"
+    if updated != current:
+        main.write_text(updated, encoding="utf-8")
+
+
+def disable_default_lines(text):
+    """Met en commentaire le -6 dB et l'égaliseur d'exemple livrés avec Equalizer APO."""
+    out = []
+    for line in text.splitlines():
+        if line.strip().lower() in APO_DEFAULT_LINES:
+            line = "# (désactivé par RazerLite) " + line.strip()
+        out.append(line)
+    return "\n".join(out) + ("\n" if out else "")

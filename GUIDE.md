@@ -128,7 +128,7 @@ L'onglet **Audio** du Kraken règle :
   - **Coupe les graves parasites** enlève les bruits sourds ;
   - un égaliseur de micro complète le tout.
 
-Les égaliseurs et le nettoyage de la voix passent par **Equalizer APO** (gratuit). Synapse faisait la même chose avec son propre pilote audio. Installe Equalizer APO une fois depuis le bouton de l'onglet Audio. Pendant l'installation, coche le Kraken dans *Playback devices* et dans *Capture devices*, puis redémarre le PC. RazerLite écrit ensuite ses réglages dans `config\razerlite.txt`, sans toucher au reste de ta configuration.
+Les égaliseurs et le nettoyage de la voix passent par **Equalizer APO** (gratuit). Synapse faisait la même chose avec son propre pilote audio. Installe Equalizer APO une fois depuis le bouton de l'onglet Audio. Pendant l'installation, coche **seulement le micro du Kraken** dans *Capture devices*, puis redémarre le PC. Ne coche pas sa sortie dans *Playback devices* : avec les effets THX Spatial Audio du pilote Razer, elle coupe tout le son (l'égaliseur du casque n'a donc pas d'effet). RazerLite met aussi en commentaire le `Preamp: -6 dB` et l'`Include: example.txt` livrés par défaut, qui baissaient le micro. Le bouton « Réglage conseillé » active suppression de bruit, coupe-graves, anti-clics, l'égaliseur « Voix forte » et +6 dB de volume ajoutés en fin de chaîne. RazerLite écrit ensuite ses réglages dans `config\razerlite.txt`, sans toucher au reste de ta configuration.
 
 Le THX Spatial Audio de Synapse est un logiciel payant de THX, il n'est pas repris. L'équivalent gratuit de Windows s'appelle **Windows Sonic pour casque** : clic droit sur l'icône du son, puis *Audio spatial*.
 
