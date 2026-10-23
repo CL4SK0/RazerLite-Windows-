@@ -120,7 +120,7 @@ Le numéro de version suit le format `0.5.N`, où N augmente à chaque build.
 L'onglet **Audio** du Kraken règle :
 
 - le volume du casque et la sensibilité du micro, avec la sourdine ;
-- le retour micro, si le casque le rend réglable depuis Windows ;
+- le **retour micro** (activé, niveau 0 à 100 %), fait par le casque lui-même comme dans Synapse : commande relevée dans une capture USB de Synapse ;
 - un égaliseur 10 bandes, avec des préréglages proches de ceux de Synapse (Jeu, Film, Musique, Basses+, Voix) ;
 - le nettoyage de la voix :
   - **Suppression de bruit** retire le clavier, la souris, le souffle et le ventilateur (filtre libre RNNoise, téléchargé automatiquement) ;

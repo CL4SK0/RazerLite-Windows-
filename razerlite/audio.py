@@ -1,7 +1,7 @@
 """Réglages audio du casque sous Windows : volumes, retour micro, égaliseur et suppression de bruit.
 
 - Volumes et sourdine : API audio de Windows (Core Audio), comme le mélangeur de volume.
-- Retour micro (sidetone) : commande exposée par le casque lui-même, si Windows la voit.
+- Retour micro (sidetone) : voir KrakenV3.set_sidetone (commande HID du casque).
 - Égaliseur et suppression de bruit : Equalizer APO (gratuit, libre), que RazerLite configure.
   La suppression de bruit utilise RNNoise (noise-suppression-for-voice), qui retire clavier, souffle, ventilateur.
 """
@@ -96,79 +96,6 @@ def _com():
             COMMETHOD([], HRESULT, "GetMute", (["out"], POINTER(wintypes.BOOL))),
         ]
 
-    class IPerChannelDbLevel(IUnknown):
-        _iid_ = GUID("{C2F8E001-F205-4BC9-99BC-C13B1E048CCB}")
-        _methods_ = [
-            COMMETHOD([], HRESULT, "GetChannelCount", (["out"], POINTER(c_uint))),
-            COMMETHOD([], HRESULT, "GetLevelRange", (["in"], c_uint), (["out"], POINTER(c_float)),
-                      (["out"], POINTER(c_float)), (["out"], POINTER(c_float))),
-            COMMETHOD([], HRESULT, "GetLevel", (["in"], c_uint), (["out"], POINTER(c_float))),
-            COMMETHOD([], HRESULT, "SetLevel", (["in"], c_uint), (["in"], c_float), (["in"], c_void_p)),
-            COMMETHOD([], HRESULT, "SetLevelUniform", (["in"], c_float), (["in"], c_void_p)),
-        ]
-
-    class IAudioVolumeLevel(IPerChannelDbLevel):
-        _iid_ = GUID("{7FB7B48F-531D-44A2-BCB3-5AD5A134B3DC}")
-        _methods_ = []
-
-    class IAudioMute(IUnknown):
-        _iid_ = GUID("{DF45AEEA-B74A-4B6B-AFAD-2366B6AA012E}")
-        _methods_ = [
-            COMMETHOD([], HRESULT, "SetMute", (["in"], wintypes.BOOL), (["in"], c_void_p)),
-            COMMETHOD([], HRESULT, "GetMute", (["out"], POINTER(wintypes.BOOL))),
-        ]
-
-    class IPart(IUnknown):
-        _iid_ = GUID("{AE2DE0E4-5BCA-4F2D-AA46-5D13F8FDB3A9}")
-
-    class IPartsList(IUnknown):
-        _iid_ = GUID("{6DAA848C-5EB0-45CC-AEA5-998A2CDA1FFB}")
-        _methods_ = [
-            COMMETHOD([], HRESULT, "GetCount", (["out"], POINTER(c_uint))),
-            COMMETHOD([], HRESULT, "GetPart", (["in"], c_uint), (["out"], POINTER(POINTER(IPart)))),
-        ]
-
-    class IDeviceTopology(IUnknown):
-        _iid_ = GUID("{2A07407E-6497-4A18-9787-32F79BD0D98F}")
-
-    class IConnector(IUnknown):
-        _iid_ = GUID("{9C2C4058-23F5-41DE-877A-DF3AF236A09E}")
-
-    IConnector._methods_ = [
-        COMMETHOD([], HRESULT, "GetType", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "GetDataFlow", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "ConnectTo", (["in"], c_void_p)),
-        COMMETHOD([], HRESULT, "Disconnect"),
-        COMMETHOD([], HRESULT, "IsConnected", (["out"], POINTER(wintypes.BOOL))),
-        COMMETHOD([], HRESULT, "GetConnectedTo", (["out"], POINTER(POINTER(IConnector)))),
-    ]
-
-    IPart._methods_ = [
-        COMMETHOD([], HRESULT, "GetName", (["out"], POINTER(ctypes.c_wchar_p))),
-        COMMETHOD([], HRESULT, "GetLocalId", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "GetGlobalId", (["out"], POINTER(ctypes.c_wchar_p))),
-        COMMETHOD([], HRESULT, "GetPartType", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "GetSubType", (["out"], POINTER(GUID))),
-        COMMETHOD([], HRESULT, "GetControlInterfaceCount", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "GetControlInterface", (["in"], c_uint), (["out"], POINTER(c_void_p))),
-        COMMETHOD([], HRESULT, "EnumPartsIncoming", (["out"], POINTER(POINTER(IPartsList)))),
-        COMMETHOD([], HRESULT, "EnumPartsOutgoing", (["out"], POINTER(POINTER(IPartsList)))),
-        COMMETHOD([], HRESULT, "GetTopologyObject", (["out"], POINTER(POINTER(IDeviceTopology)))),
-        COMMETHOD([], HRESULT, "Activate", (["in"], wintypes.DWORD), (["in"], POINTER(GUID)),
-                  (["out"], POINTER(POINTER(IUnknown)))),
-    ]
-
-    class ISubunit(IUnknown):
-        _iid_ = GUID("{82149A85-DBA6-4487-86BB-EA8F7FEFCC71}")
-        _methods_ = []
-
-    IDeviceTopology._methods_ = [
-        COMMETHOD([], HRESULT, "GetConnectorCount", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "GetConnector", (["in"], c_uint), (["out"], POINTER(POINTER(IConnector)))),
-        COMMETHOD([], HRESULT, "GetSubunitCount", (["out"], POINTER(c_uint))),
-        COMMETHOD([], HRESULT, "GetSubunit", (["in"], c_uint), (["out"], POINTER(POINTER(ISubunit)))),
-    ]
-
     class IMMDevice(IUnknown):
         _iid_ = GUID("{D666063F-1587-4E43-81F1-B948E807363F}")
         _methods_ = [
@@ -212,7 +139,6 @@ class Endpoint:
         self.id = device.GetId()
         unk = device.Activate(com["IAudioEndpointVolume"]._iid_, self.CLSCTX_ALL, None)
         self.volume_ctl = unk.QueryInterface(com["IAudioEndpointVolume"])
-        self._sidetone = None
 
     @property
     def guid(self):
@@ -233,56 +159,6 @@ class Endpoint:
 
     def set_muted(self, value):
         self.volume_ctl.SetMute(bool(value), None)
-
-    # Retour micro : réglage interne du casque, présent dans le schéma (topologie) de l'appareil
-    def sidetone(self):
-        if self._sidetone is None:
-            self._sidetone = _find_sidetone(self.device) or False
-        return self._sidetone or None
-
-
-class Sidetone:
-    def __init__(self, level, mute):
-        self.level, self.mute = level, mute
-        self.low, self.high, _ = level.GetLevelRange(0)
-
-    def percent(self):
-        if self.mute is not None and self.mute.GetMute():
-            return 0
-        span = (self.high - self.low) or 1
-        return round((self.level.GetLevel(0) - self.low) / span * 100)
-
-    def set_percent(self, percent):
-        if self.mute is not None:
-            self.mute.SetMute(percent <= 0, None)
-        self.level.SetLevelUniform(self.low + (self.high - self.low) * max(0, min(100, percent)) / 100, None)
-
-
-def _find_sidetone(device):
-    com = _com()
-    try:
-        unk = device.Activate(com["IDeviceTopology"]._iid_, Endpoint.CLSCTX_ALL, None)
-        topo = unk.QueryInterface(com["IDeviceTopology"])
-        connected = topo.GetConnector(0).GetConnectedTo()
-        hw = connected.QueryInterface(com["IPart"]).GetTopologyObject()
-        for i in range(hw.GetSubunitCount()):
-            part = hw.GetSubunit(i).QueryInterface(com["IPart"])
-            name = (part.GetName() or "").lower()
-            if not any(k in name for k in ("sidetone", "side tone", "monitor", "retour")):
-                continue
-            try:
-                level = part.Activate(Endpoint.CLSCTX_ALL, com["IAudioVolumeLevel"]._iid_)
-                level = level.QueryInterface(com["IAudioVolumeLevel"])
-            except Exception:
-                continue
-            try:
-                mute = part.Activate(Endpoint.CLSCTX_ALL, com["IAudioMute"]._iid_).QueryInterface(com["IAudioMute"])
-            except Exception:
-                mute = None
-            return Sidetone(level, mute)
-    except Exception:
-        return None
-    return None
 
 
 def find_headset():

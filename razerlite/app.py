@@ -523,19 +523,18 @@ class AudioPage(Page):
         body.pack(fill="both", expand=True, padx=20, pady=18)
         section(body, "Micro").pack(anchor="w")
         self.volume_row(body, self.mic, "Sensibilité")
-        side = self.out.sidetone() if self.out else None
+        # Retour micro : fait par le casque lui-même, comme dans Synapse (sans délai ni traitement Windows)
+        side = self.cfg.setdefault("sidetone", {"on": False, "level": 50})
         row = ctk.CTkFrame(body, fg_color="transparent")
         row.pack(fill="x", pady=(14, 0))
         ctk.CTkLabel(row, text="Retour micro", font=font(12), text_color=t.TEXT, anchor="w").pack(side="left")
-        if side:
-            value = ctk.CTkLabel(row, text=f"{side.percent()} %", font=font(12, "bold"), text_color=t.TEXT)
-            value.pack(side="right")
-            s = slider(body, 0, 100, lambda v: (side.set_percent(int(v)), value.configure(text=f"{int(v)} %")), 100)
-            s.set(side.percent())
-            s.pack(fill="x", pady=(6, 0))
-        else:
-            ctk.CTkLabel(body, text="Ce casque ne le rend pas réglable depuis Windows.", font=font(11),
-                         text_color=t.MUTED, anchor="w").pack(anchor="w")
+        sw, self.side_var = switch(row, "Activé", self.set_sidetone, side.get("on", False))
+        sw.pack(side="right")
+        self.side_value = ctk.CTkLabel(row, text=f"{side.get('level', 50)} %", font=font(12, "bold"), text_color=t.TEXT)
+        self.side_value.pack(side="right", padx=(0, 16))
+        self.side_slider = slider(body, 0, 100, lambda v: self.set_sidetone(level=int(v)), 100)
+        self.side_slider.set(side.get("level", 50))
+        self.side_slider.pack(fill="x", pady=(6, 0))
 
         section(body, "Nettoyage de la voix").pack(anchor="w", pady=(18, 4))
         for key, label, hint in (
@@ -551,6 +550,14 @@ class AudioPage(Page):
                          anchor="w").pack(anchor="w", padx=(52, 0))
         section(body, "Égaliseur du micro").pack(anchor="w", pady=(18, 0))
         self.eq_block(body, "mic_eq", audio.MIC_PRESETS, "Neutre", bands=False)
+
+    def set_sidetone(self, level=None):
+        side = self.cfg.setdefault("sidetone", {"on": False, "level": 50})
+        side["on"] = bool(self.side_var.get())
+        if level is not None:
+            side["level"] = level
+            self.side_value.configure(text=f"{level} %")
+        self.app.schedule_apply(self.device, "sidetone")
 
     def volume_row(self, master, endpoint, label):
         row = ctk.CTkFrame(master, fg_color="transparent")
@@ -1062,6 +1069,9 @@ class App(ctk.CTk):
                     device.set_brightness(int(s.get("brightness", 100)))
             elif what == "brightness":
                 device.set_brightness(int(s.get("brightness", 100)))
+            elif what == "sidetone":
+                side = s.get("audio", {}).get("sidetone", {})
+                device.set_sidetone(side.get("on", False), side.get("level", 50))
             elif what == "dpi":
                 stages = s["dpi_stages"][:5] or [800]
                 active = max(1, min(len(stages), int(s.get("active_stage", 1))))

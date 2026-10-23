@@ -131,6 +131,9 @@ def apply_device(device, settings: dict):
             attempt("molette", device.set_smart_reel, settings["smart_reel"])
     if "idle_time" in features and settings.get("idle_time"):
         attempt("veille", device.set_idle_time, int(settings["idle_time"]))
+    sidetone = settings.get("audio", {}).get("sidetone")
+    if sidetone and hasattr(device, "set_sidetone"):
+        attempt("retour micro", device.set_sidetone, sidetone.get("on", False), sidetone.get("level", 50))
     return errors
 
 

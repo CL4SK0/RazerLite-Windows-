@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ["APPDATA"] = tempfile.mkdtemp()
@@ -137,6 +138,22 @@ class DeviceTests(unittest.TestCase):
         k = dv.KrakenV3(dv.SPECS_BY_PID[0x0533], transport=t)
         k.set_effect("static", color1="#ff8800")
         self.assertEqual([w[:6].hex() for w in t.writes], ["4001000f0800", "400300ff8800"])
+
+    def test_kraken_sidetone(self):
+        # octets relevés dans la capture USB de Synapse (retour micro coupé à 100 %, activé à 0, 50, 100 %)
+        self.assertEqual(p.kraken_sidetone(False, 100).hex(), "7001010064")
+        self.assertEqual(p.kraken_sidetone(True, 0).hex(), "7001010100")
+        self.assertEqual(p.kraken_sidetone(True, 50).hex(), "7001010132")
+        self.assertEqual(p.kraken_sidetone(True, 100).hex(), "7001010164")
+        t = FakeTransport()
+        k = dv.KrakenV3(dv.SPECS_BY_PID[0x0533], path=b"kraken", transport=t)
+        with mock.patch.object(dv, "enumerate_raw", return_value=[]):
+            k.set_sidetone(True, 50)
+        self.assertEqual(t.writes, [bytes.fromhex("7001010132")])
+        settings = {"audio": {"sidetone": {"on": True, "level": 100}}}
+        with mock.patch.object(dv, "enumerate_raw", return_value=[]):
+            self.assertEqual(profiles.apply_device(k, settings), [])
+        self.assertEqual(t.writes[-1], bytes.fromhex("7001010164"))
 
     def test_profile_apply(self):
         m, t = self.mouse()

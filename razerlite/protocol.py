@@ -287,6 +287,15 @@ def kraken_set_brightness(value):
     return _kraken(KRAKEN_SET_BRIGHTNESS, bytes((0x00, 0x00, max(0, min(255, value)))))
 
 
+# Retour micro (sidetone), relevé dans une capture USB de Synapse :
+# SET_REPORT sortie, report 0x70 sur l'interface 3, 5 octets « 70 01 01 <activé> <niveau 0-100> ».
+KRAKEN_SIDETONE_REPORT = 0x70
+
+
+def kraken_sidetone(enabled, level):
+    return bytes((KRAKEN_SIDETONE_REPORT, 0x01, 0x01, 1 if enabled else 0, max(0, min(100, int(level)))))
+
+
 # --- Mode de l'appareil et molette ------------------------------------------
 
 DEVICE_MODE_NORMAL = 0x00   # le firmware gère lui-même les boutons DPI
