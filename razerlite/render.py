@@ -680,11 +680,18 @@ def render_keyboard_photo(w, h):
     base.alpha_composite(shape)
     light = _place(Image.open(os.path.join(DEVICE_ART, "keyboard_light.png")).convert("L"), size, off, canvas)
     keys = [(off[0] + x0 * k, off[1] + y0 * k, off[0] + x1 * k, off[1] + y1 * k) for x0, y0, x1, y1 in meta["keys"]]
-    labels = Image.new("P", canvas, 0)
-    d = ImageDraw.Draw(labels)
-    grow = 0.13 * (keys[1][0] - keys[0][0]) / 2  # moitié de l'interstice entre touches
-    for i, (x0, y0, x1, y1) in enumerate(keys):
-        d.rectangle((x0 - grow, y0 - grow, x1 + grow, y1 + grow * 2), fill=i + 1)
+    label_path = os.path.join(DEVICE_ART, "keyboard_labels.png")
+    if os.path.exists(label_path):
+        # chaque pixel appartient à la touche la plus proche : le halo entre les touches suit leur couleur
+        src = Image.open(label_path).convert("L").resize(size, Image.NEAREST)
+        labels = Image.new("P", canvas, 0)
+        labels.paste(Image.frombytes("P", src.size, src.tobytes()), (round(off[0]), round(off[1])))
+    else:
+        labels = Image.new("P", canvas, 0)
+        d = ImageDraw.Draw(labels)
+        grow = 0.13 * (keys[1][0] - keys[0][0]) / 2  # moitié de l'interstice entre touches
+        for i, (x0, y0, x1, y1) in enumerate(keys):
+            d.rectangle((x0 - grow, y0 - grow, x1 + grow, y1 + grow * 2), fill=i + 1)
     # logo RazerLite gravé sous la barre d'espace (à la place du logo Razer)
     from . import logo
     lx, ly, lh = meta["logo"]

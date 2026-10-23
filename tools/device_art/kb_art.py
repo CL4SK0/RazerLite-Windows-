@@ -1,5 +1,5 @@
-import sys, json, cv2, numpy as np
-sys.path.insert(0, "/home/user/razerlite-windows-")
+import os, sys, json, cv2, numpy as np
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from razerlite.render import KEY_ROWS, TALL_KEYS
 S, OUT = sys.argv[1], sys.argv[2]
 img = cv2.imread(f"{S}/photos/keyboard.jpg")
