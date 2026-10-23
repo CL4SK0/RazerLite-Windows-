@@ -11,7 +11,7 @@ from tkinter import colorchooser, messagebox
 
 import customtkinter as ctk
 
-from . import __version__, audio, instance, logo, profiles, updater
+from . import __version__, audio, instance, logo, profiles, protocol, updater
 from . import theme as t
 from .devices import RazerError, find_devices
 from .osd import DpiOsd
@@ -536,6 +536,20 @@ class AudioPage(Page):
         self.side_slider.set(side.get("level", 50))
         self.side_slider.pack(fill="x", pady=(6, 0))
 
+        lab = ctk.CTkFrame(body, fg_color="transparent")
+        lab.pack(fill="x", pady=(8, 0))
+        ctk.CTkLabel(lab, text="Labo :", font=font(11), text_color=t.MUTED).pack(side="left")
+        for name, prefix in protocol.SIDETONE_LAB:
+            ctk.CTkButton(lab, text=name, width=30, height=24, font=font(11), fg_color=t.CARD_HI,
+                          hover_color=t.BORDER, text_color=t.TEXT, corner_radius=6,
+                          command=lambda n=name, x=prefix: self.try_variant(n, x)).pack(side="left", padx=2)
+        ctk.CTkButton(lab, text="Normal", width=60, height=24, font=font(11), fg_color=t.CARD_HI,
+                      hover_color=t.BORDER, text_color=t.TEXT, corner_radius=6,
+                      command=lambda: self.set_sidetone()).pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(body, text="Expérimental : essaie A à F, parle, et note celle qui change le son. "
+                     "« Normal » revient au retour de Synapse.", font=font(10), text_color=t.MUTED,
+                     wraplength=320, justify="left", anchor="w").pack(anchor="w")
+
         section(body, "Nettoyage de la voix").pack(anchor="w", pady=(18, 4))
         for key, label, hint in (
             ("noise", "Suppression de bruit", "Retire clavier, souris, souffle et ventilateur (RNNoise)."),
@@ -550,6 +564,14 @@ class AudioPage(Page):
                          anchor="w").pack(anchor="w", padx=(52, 0))
         section(body, "Égaliseur du micro").pack(anchor="w", pady=(18, 0))
         self.eq_block(body, "mic_eq", audio.MIC_PRESETS, "Neutre", bands=False)
+
+    def try_variant(self, name, prefix):
+        level = self.cfg.get("sidetone", {}).get("level", 50)
+        try:
+            self.device.send_report(protocol.kraken_sidetone_variant(prefix, level))
+            self.app.status(f"Labo retour micro : variante {name} ({prefix}) envoyée. Parle et écoute.")
+        except RazerError as exc:
+            self.app.status(f"Variante {name} refusée par le casque : {exc}", True)
 
     def set_sidetone(self, level=None):
         side = self.cfg.setdefault("sidetone", {"on": False, "level": 50})

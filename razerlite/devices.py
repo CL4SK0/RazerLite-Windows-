@@ -356,8 +356,11 @@ class KrakenV3(Device):
         return None
 
     def set_sidetone(self, enabled, level):
-        """Retour micro géré par le casque lui-même (sans délai), comme dans Synapse."""
-        report = p.kraken_sidetone(enabled, level)
+        """Retour micro géré par le casque lui-même, comme dans Synapse."""
+        self.send_report(p.kraken_sidetone(enabled, level))
+
+    def send_report(self, report):
+        """Envoie un output report sur la collection HID qui l'accepte (retenue pour les fois suivantes)."""
         # Sous Windows, le report 0x70 peut appartenir à une autre collection HID de la même interface :
         # on essaie la nôtre, puis les autres, et on retient celle qui accepte.
         paths = [getattr(self, "_sidetone_path", None) or self.path]
@@ -382,7 +385,7 @@ class KrakenV3(Device):
                 return
             except (OSError, ValueError, RazerError) as exc:
                 errors.append(str(exc))
-        raise RazerError(f"{self.name} : retour micro refusé ({'; '.join(errors) or 'aucune interface'})")
+        raise RazerError(f"{self.name} : commande {report[:3].hex()} refusée ({'; '.join(errors) or 'aucune interface'})")
 
     def set_effect(self, effect, zone=None, color1="#00ff00", color2=None, speed=2, direction=1):
         if effect == "static":
