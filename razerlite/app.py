@@ -895,6 +895,10 @@ class App(ctk.CTk):
                         page.show_live(*self._dpi_last)
             except RazerError:
                 delay = 3000  # souris en veille ou débranchée : on réessaie plus tard
+            except Exception as exc:  # quoi qu'il arrive, la surveillance du bouton DPI ne doit jamais s'arrêter
+                mouse.close()
+                self.status(f"Surveillance DPI : {exc}", True)
+                delay = 3000
         self.after(delay, self.dpi_watch)
 
     def refresh_batteries(self):
