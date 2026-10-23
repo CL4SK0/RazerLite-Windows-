@@ -50,6 +50,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          git log -1 --pretty=%B > notes.txt
+          git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > notes.txt
           gh release create "v${{ steps.v.outputs.version }}" dist/RazerLite.exe RazerLite-pack.zip \
             --title "RazerLite ${{ steps.v.outputs.version }}" --notes-file notes.txt --latest
