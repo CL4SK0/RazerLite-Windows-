@@ -1,0 +1,47 @@
+# À chaque modification poussée sur la branche principale : tests, fabrication de RazerLite.exe
+# et publication d'une nouvelle version. RazerLite la détecte et propose de l'installer.
+name: Nouvelle version
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Numéro de version
+        id: v
+        run: python tools/stamp_version.py
+
+      - name: Tests
+        run: python -m unittest discover -s tests
+
+      - name: Fabrication de RazerLite.exe
+        run: |
+          python -m pip install --upgrade pyinstaller -r requirements.txt
+          python -c "from razerlite import logo; logo.save_ico('RazerLite.ico')"
+          python -m PyInstaller --noconfirm --onefile --windowed --collect-data customtkinter --add-data "razerlite\assets;razerlite\assets" --icon RazerLite.ico --name RazerLite RazerLite.pyw
+
+      - name: Pack (version script)
+        run: python tools/make_pack.py RazerLite-pack.zip
+
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          git log -1 --pretty=%B > notes.txt
+          gh release create "v${{ steps.v.outputs.version }}" dist/RazerLite.exe RazerLite-pack.zip \
+            --title "RazerLite ${{ steps.v.outputs.version }}" --notes-file notes.txt --latest
