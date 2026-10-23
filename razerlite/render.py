@@ -131,7 +131,8 @@ def engrave(base, mask):
 class Rendered:
     """Image de base + masques de lumière, à la taille d'affichage."""
 
-    def __init__(self, base, zones, under=None, keys=None, legend=None, gaps=None, buttons=None, key_codes=None):
+    def __init__(self, base, zones, under=None, keys=None, legend=None, gaps=None, buttons=None, key_codes=None,
+                 key_light=None, key_labels=None):
         self.base = base          # RGBA
         self.zones = zones        # zone -> [(masque L, intensité)]
         self.under = under or {}  # zone -> masque L (halo dessiné sous l'appareil)
@@ -140,6 +141,8 @@ class Rendered:
         self.gaps = gaps          # clavier : masque des interstices entre touches
         self.buttons = buttons or {}  # souris : bouton -> (masque, contour)
         self.key_codes = key_codes or []  # clavier : code de touche Windows pour chaque touche
+        self.key_light = key_light    # clavier photo : lumière réelle (masque L) sous et dans les touches
+        self.key_labels = key_labels  # clavier photo : image « P », pixel -> 1 + index de la touche
 
     def compose(self, colors, key_colors=None, pressed=(), accent=(68, 214, 44)):
         """colors : zone -> (r, g, b) ou None ; key_colors : (r, g, b) par touche ;
@@ -157,7 +160,16 @@ class Rendered:
                 continue
             for mask, level in layers:
                 paint(out, c, scale_mask(mask, level))
-        if key_colors is not None and self.keys:
+        if key_colors is not None and self.key_labels is not None:
+            palette = [0, 0, 0]
+            for c in key_colors:
+                palette += list(c or (0, 0, 0))
+            labels = self.key_labels.copy()
+            labels.putpalette(palette + [0, 0, 0] * (256 - len(palette) // 3))
+            lit = ImageChops.multiply(labels.convert("RGB"), self.key_light.convert("RGB"))
+            out = ImageChops.add(out.convert("RGB"), lit).convert("RGBA")
+            out.putalpha(self.base.getchannel("A"))
+        elif key_colors is not None and self.keys:
             light = Image.new("RGB", size, (0, 0, 0))
             d = ImageDraw.Draw(light)
             for (x0, y0, x1, y1, _), c in zip(self.keys, key_colors):
@@ -584,7 +596,110 @@ def render_headset(w, h):
     return finish(base, zones, {}, w, h)
 
 
-RENDERERS = {"mouse": render_mouse, "keyboard": render_keyboard, "headset": render_headset}
+DEVICE_ART = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "devices")
+
+
+def _photo(kind):
+    """Image détourée de l'appareil réel (assets/devices/<kind>.png) et ses repères, ou None."""
+    import json
+    path = os.path.join(DEVICE_ART, kind + ".png")
+    if not os.path.exists(path):
+        return None
+    with open(os.path.join(DEVICE_ART, kind + ".json"), encoding="utf-8") as f:
+        meta = json.load(f)
+    return Image.open(path).convert("RGBA"), meta
+
+
+def _fit(img_size, w, h, margin=0.92):
+    k = min(w * margin / img_size[0], h * margin / img_size[1])
+    nw, nh = round(img_size[0] * k), round(img_size[1] * k)
+    return k, ((w - nw) // 2, (h - nh) // 2), (nw, nh)
+
+
+def _place(img, size, offset, canvas):
+    out = Image.new(img.mode, canvas, 0)
+    out.paste(img.resize(size, Image.LANCZOS), offset)
+    return out
+
+
+def render_mouse_photo(w, h):
+    """Basilisk V3 Pro d'Erwan, d'après sa photo : la molette garde sa vraie lumière, le logo Razer
+    est remplacé par le symbole RazerLite, la bande lumineuse fait le tour du bas."""
+    img, meta = _photo("mouse")
+    k, off, size = _fit(img.size, w, h, 0.86)
+    canvas = (w, h)
+    shape = _place(img, size, off, canvas)
+    alpha = shape.getchannel("A")
+    base = Image.new("RGBA", canvas, (0, 0, 0, 0))
+    shadow = Image.new("L", canvas, 0)
+    shadow.paste(alpha, (round(w * 0.006), round(h * 0.012)))
+    paint(base, (0, 0, 0), shadow.filter(ImageFilter.GaussianBlur(w * 0.03)))
+    base.alpha_composite(shape)
+
+    def pt(x, y):
+        return (off[0] + x * k, off[1] + y * k)
+
+    wheel = _place(Image.open(os.path.join(DEVICE_ART, "mouse_wheel.png")).convert("L"), size, off, canvas)
+    lx, ly, lr = meta["logo"]
+    cxy = pt(lx, ly)
+    logo = logo_mask(canvas, cxy[0], cxy[1], lr * k)
+    engrave(base, logo)
+    # bande lumineuse : bord de la silhouette, moitié basse et flancs
+    edge = ImageChops.subtract(alpha, alpha.filter(ImageFilter.MinFilter(5)))
+    low = Image.new("L", canvas, 0)
+    ImageDraw.Draw(low).rectangle((0, off[1] + size[1] * 0.38, w, h), fill=255)
+    low = low.filter(ImageFilter.GaussianBlur(h * 0.04))
+    strip_edge = ImageChops.multiply(edge, low)
+    strip_under = ImageChops.multiply(alpha.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(w * 0.05)), low)
+    strip_under = ImageChops.subtract(strip_under, alpha)
+    zones = {
+        "Molette": [(wheel, 1.0), (wheel.filter(ImageFilter.GaussianBlur(w * 0.012)), 0.8)],
+        "Logo": [(logo, 1.0), (logo.filter(ImageFilter.GaussianBlur(w * 0.012)), 0.8)],
+        "Bande": [(strip_edge, 1.0)],
+    }
+    buttons = {}
+    for name, poly in meta["buttons"].items():
+        m = mask_of(canvas, lambda d, p=poly: d.polygon([pt(x, y) for x, y in p], fill=255))
+        m = ImageChops.multiply(m, alpha)
+        buttons[name] = (m, edge_of(m, 2))
+    return Rendered(base, zones, {"Bande": strip_under}, buttons=buttons)
+
+
+def render_keyboard_photo(w, h):
+    """DeathStalker V2 Pro d'Erwan, d'après sa photo redressée : chaque touche reprend la vraie lumière
+    (légendes et halo sous la touche), recolorée touche par touche ; logo RazerLite sous la barre d'espace."""
+    img, meta = _photo("keyboard")
+    k, off, size = _fit(img.size, w, h, 0.97)
+    canvas = (w, h)
+    shape = _place(img, size, off, canvas)
+    alpha = shape.getchannel("A")
+    base = Image.new("RGBA", canvas, (0, 0, 0, 0))
+    shadow = Image.new("L", canvas, 0)
+    shadow.paste(alpha, (0, max(1, round(h * 0.012))))
+    paint(base, (0, 0, 0), shadow.filter(ImageFilter.GaussianBlur(h * 0.02)))
+    base.alpha_composite(shape)
+    light = _place(Image.open(os.path.join(DEVICE_ART, "keyboard_light.png")).convert("L"), size, off, canvas)
+    keys = [(off[0] + x0 * k, off[1] + y0 * k, off[0] + x1 * k, off[1] + y1 * k) for x0, y0, x1, y1 in meta["keys"]]
+    labels = Image.new("P", canvas, 0)
+    d = ImageDraw.Draw(labels)
+    grow = 0.13 * (keys[1][0] - keys[0][0]) / 2  # moitié de l'interstice entre touches
+    for i, (x0, y0, x1, y1) in enumerate(keys):
+        d.rectangle((x0 - grow, y0 - grow, x1 + grow, y1 + grow * 2), fill=i + 1)
+    # logo RazerLite gravé sous la barre d'espace (à la place du logo Razer)
+    from . import logo
+    lx, ly, lh = meta["logo"]
+    wm = logo.wordmark(max(6, round(lh * k * 1.6))).getchannel("A")
+    engr = Image.new("L", canvas, 0)
+    engr.paste(wm, (round(off[0] + lx * k - wm.size[0] / 2), round(off[1] + ly * k - wm.size[1] / 2)))
+    paint(base, (78, 82, 88), engr)
+    left = [(x0, y0, x1, y1, (x0 - keys[0][0]) / max(1, keys[-1][2] - keys[0][0])) for x0, y0, x1, y1 in keys]
+    return Rendered(base, {}, {}, keys=left, key_codes=[code for row in KEY_CODES for code in row],
+                    key_light=light, key_labels=labels)
+
+
+RENDERERS = {"mouse": render_mouse_photo if _photo("mouse") else render_mouse,
+             "keyboard": render_keyboard_photo if _photo("keyboard") else render_keyboard,
+             "headset": render_headset}
 _cache = {}
 
 
