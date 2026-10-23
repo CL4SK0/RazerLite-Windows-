@@ -51,5 +51,12 @@ class MonitorTest(unittest.TestCase):
         self.assertTrue(m.fallback_reason)
 
 
+    def test_lowlat_pcm_round_trip(self):
+        raw = array.array("h", [16384, -32768]).tobytes()
+        samples = lowlat.decode(raw, "h")
+        self.assertEqual(samples.tolist(), [0.5, -1.0])
+        self.assertEqual(lowlat.encode(samples, "h"), raw)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -14,9 +14,11 @@ import threading
 
 AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000
 AUDCLNT_BUFFERFLAGS_SILENT = 0x2
+WAVE_FORMAT_PCM = 1
 WAVE_FORMAT_IEEE_FLOAT = 3
 WAVE_FORMAT_EXTENSIBLE = 0xFFFE
 KSDATAFORMAT_SUBTYPE_IEEE_FLOAT = "{00000003-0000-0010-8000-00AA00389B71}"
+KSDATAFORMAT_SUBTYPE_PCM = "{00000001-0000-0010-8000-00AA00389B71}"
 CLSCTX_ALL = 23
 
 
@@ -40,12 +42,15 @@ def _interfaces():
 
     from comtypes import COMMETHOD, GUID, IUnknown
 
+    # structures « packées » sur 1 octet dans mmreg.h : sans ça, SubFormat est lu 2 octets trop loin
     class WAVEFORMATEX(ctypes.Structure):
+        _pack_ = 1
         _fields_ = [("wFormatTag", wintypes.WORD), ("nChannels", wintypes.WORD), ("nSamplesPerSec", wintypes.DWORD),
                     ("nAvgBytesPerSec", wintypes.DWORD), ("nBlockAlign", wintypes.WORD),
                     ("wBitsPerSample", wintypes.WORD), ("cbSize", wintypes.WORD)]
 
     class WAVEFORMATEXTENSIBLE(ctypes.Structure):
+        _pack_ = 1
         _fields_ = [("Format", WAVEFORMATEX), ("wValidBitsPerSample", wintypes.WORD),
                     ("dwChannelMask", wintypes.DWORD), ("SubFormat", GUID)]
 
@@ -102,14 +107,44 @@ def _interfaces():
     return WAVEFORMATEX, WAVEFORMATEXTENSIBLE, IAudioClient3, IAudioCaptureClient, IAudioRenderClient
 
 
-def _is_float(fmt, ext_cls):
+def sample_kind(fmt, ext_cls):
+    """« f » (float 32 bits), « h » (entier 16 bits), « i » (entier 32 bits) ou None si non géré."""
     f = fmt.contents
-    if f.wFormatTag == WAVE_FORMAT_IEEE_FLOAT:
-        return f.wBitsPerSample == 32
-    if f.wFormatTag == WAVE_FORMAT_EXTENSIBLE:
-        ext = ctypes.cast(fmt, ctypes.POINTER(ext_cls)).contents
-        return str(ext.SubFormat).upper() == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT and f.wBitsPerSample == 32
-    return False
+    tag = f.wFormatTag
+    if tag == WAVE_FORMAT_EXTENSIBLE:
+        sub = str(ctypes.cast(fmt, ctypes.POINTER(ext_cls)).contents.SubFormat).upper()
+        tag = WAVE_FORMAT_IEEE_FLOAT if sub == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT else (
+            WAVE_FORMAT_PCM if sub == KSDATAFORMAT_SUBTYPE_PCM else None)
+    if tag == WAVE_FORMAT_IEEE_FLOAT and f.wBitsPerSample == 32:
+        return "f"
+    if tag == WAVE_FORMAT_PCM and f.wBitsPerSample == 16:
+        return "h"
+    if tag == WAVE_FORMAT_PCM and f.wBitsPerSample == 32:
+        return "i"
+    return None
+
+
+SCALE = {"f": 1.0, "h": 32768.0, "i": 2147483648.0}
+
+
+def decode(raw, kind):
+    """Octets bruts → array de floats entre -1 et 1."""
+    data = array.array("i" if kind == "i" else kind)
+    data.frombytes(raw)
+    if kind == "f":
+        return data
+    scale = SCALE[kind]
+    return array.array("f", (v / scale for v in data))
+
+
+def encode(samples, kind):
+    """Floats entre -1 et 1 → octets bruts au format du casque."""
+    if kind == "f":
+        return samples.tobytes()
+    scale = SCALE[kind]
+    top = scale - 1
+    return array.array("i" if kind == "i" else kind,
+                       (int(max(-scale, min(top, v * scale))) for v in samples)).tobytes()
 
 
 class LowLatencyMonitor:
@@ -155,7 +190,7 @@ class LowLatencyMonitor:
             thread.join(2)
 
     def _run(self, ready, result):
-        clients, events, formats, task = [], [], [], None
+        clients, events, formats, kinds, task = [], [], [], [], None
         k32 = ole32 = None
         try:
             import comtypes
@@ -173,8 +208,11 @@ class LowLatencyMonitor:
                 client = ep.device.Activate(IAC3._iid_, CLSCTX_ALL, None).QueryInterface(IAC3)
                 fmt = client.GetMixFormat()
                 formats.append(fmt)
-                if not _is_float(fmt, WFXE):
-                    raise RuntimeError("format audio inattendu (pas en 32 bits flottants)")
+                kind = sample_kind(fmt, WFXE)
+                if kind is None:
+                    f = fmt.contents
+                    raise RuntimeError(f"format audio non géré ({f.wBitsPerSample} bits, type {f.wFormatTag})")
+                kinds.append(kind)
                 default, fundamental, minimum, maximum = client.GetSharedModeEnginePeriod(fmt)
                 setup.append((client, fmt, minimum, default))
                 clients.append(client)
@@ -228,8 +266,7 @@ class LowLatencyMonitor:
                     if flags & AUDCLNT_BUFFERFLAGS_SILENT or not data:
                         samples = array.array("f", bytes(frames * in_ch * 4))
                     else:
-                        samples = array.array("f")
-                        samples.frombytes(ctypes.string_at(data, frames * in_align))
+                        samples = decode(ctypes.string_at(data, frames * in_align), kinds[0])
                     capture.ReleaseBuffer(frames)
                     padding = out.GetCurrentPadding()
                     room = min(out_size - padding, max(0, target - padding))
@@ -238,7 +275,7 @@ class LowLatencyMonitor:
                         continue  # le casque a déjà assez d'avance : ce paquet est sauté
                     block = mix(samples[len(samples) - n * in_ch:], in_ch, out_ch, self.gain)
                     ptr = render.GetBuffer(n)
-                    ctypes.memmove(ptr, block.tobytes(), n * out_align)
+                    ctypes.memmove(ptr, encode(block, kinds[1]), n * out_align)
                     render.ReleaseBuffer(n, 0)
         except BaseException as exc:
             result["error"] = str(exc) or exc.__class__.__name__
