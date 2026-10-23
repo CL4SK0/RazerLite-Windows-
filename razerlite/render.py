@@ -186,105 +186,131 @@ class Rendered:
         return out
 
 
+def dots(base, mask, step, radius, color):
+    """Texture pointillée (grips en caoutchouc, grille de haut-parleur) limitée à un masque."""
+    layer = Image.new("L", base.size, 0)
+    d = ImageDraw.Draw(layer)
+    W, H = base.size
+    y, row = 0.0, 0
+    while y < H:
+        x = (step / 2) if row % 2 else 0.0
+        while x < W:
+            d.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
+            x += step
+        y += step * 0.87
+        row += 1
+    paint(base, color, ImageChops.multiply(layer, mask))
+
+
 def render_mouse(w, h):
-    """Basilisk V3 Pro vue de dessus (droitier, repose-pouce à gauche)."""
+    """Basilisk V3 Pro vue de dessus, d'après photo : avant anguleux, coupe en diagonale sur le dos,
+    large repose-pouce à gauche avec grip pointillé, grip sur le flanc droit, molette éclairée
+    suivie de deux petits boutons, logo sur la paume et bande lumineuse tout autour du bas."""
     W, H = w * SS, h * SS
-    mw = min(W * 0.64, H * 0.52)
-    mh = mw * 1.72
+    mw = min(W * 0.68, H * 0.55)
+    mh = mw * 1.60
     ox, oy = (W - mw) / 2, (H - mh) / 2
 
     def P(x, y):
         return (ox + x * mw, oy + y * mh)
 
     outline = [P(*p) for p in [
-        (0.50, 0.000), (0.68, 0.012), (0.82, 0.070), (0.89, 0.180), (0.915, 0.330), (0.93, 0.500),
-        (0.925, 0.660), (0.895, 0.800), (0.83, 0.915), (0.70, 0.985), (0.52, 1.000), (0.33, 0.985),
-        (0.18, 0.940), (0.075, 0.860), (0.02, 0.745), (0.035, 0.640), (0.085, 0.555), (0.105, 0.440),
-        (0.105, 0.300), (0.135, 0.160), (0.21, 0.065), (0.33, 0.015)]]
+        (0.50, 0.000), (0.70, 0.006), (0.84, 0.040), (0.92, 0.130), (0.96, 0.270), (0.98, 0.420), (0.97, 0.580),
+        (0.92, 0.730), (0.83, 0.860), (0.70, 0.950), (0.55, 0.990), (0.40, 0.970), (0.27, 0.900), (0.15, 0.820),
+        (0.04, 0.760), (0.00, 0.640), (0.01, 0.520), (0.05, 0.440), (0.08, 0.360), (0.09, 0.220), (0.13, 0.090),
+        (0.25, 0.020)]]
     body = spline(outline)
     size = (W, H)
     base = Image.new("RGBA", size, (0, 0, 0, 0))
 
-    # Ombre portée
     shadow = mask_of(size, lambda d: d.polygon([(x + mw * 0.015, y + mh * 0.02) for x, y in body], fill=200))
     paint(base, (0, 0, 0), shadow.filter(ImageFilter.GaussianBlur(mw * 0.05)))
-
     body_mask = mask_of(size, lambda d: d.polygon(body, fill=255))
-    shell = gradient(size, (38, 41, 46), (20, 22, 25)).convert("RGBA")
+    shell = gradient(size, (38, 41, 46), (18, 20, 23)).convert("RGBA")
     shell.putalpha(body_mask)
     base.alpha_composite(shell)
-    # Reflet doux sur le dos de la souris
-    sheen = radial(size, P(0.40, 0.50), (mw * 0.42, mh * 0.30), 60, 0)
+    sheen = radial(size, P(0.48, 0.42), (mw * 0.40, mh * 0.30), 60, 0)
     paint(base, (255, 255, 255), ImageChops.multiply(sheen, body_mask).point(lambda v: v // 5))
     relief(base, body_mask, mw * 0.10, 0.65)
     grain(base, body_mask, 7)
-    # Reflet spéculaire allongé sur la bosse
-    spec = mask_of(size, lambda m: m.ellipse((*P(0.30, 0.40), *P(0.50, 0.64)), fill=34))
-    paint(base, (255, 255, 255), ImageChops.multiply(spec.filter(ImageFilter.GaussianBlur(mw * 0.07)), body_mask))
+
+    # Grips en caoutchouc pointillé : repose-pouce à gauche, flanc droit
+    thumb = mask_of(size, lambda m: m.polygon(spline([P(0.02, 0.47), P(0.15, 0.44), P(0.21, 0.60), P(0.18, 0.78),
+                                                      P(0.06, 0.76), P(0.00, 0.62)]), fill=255))
+    thumb = ImageChops.multiply(thumb, body_mask)
+    paint(base, (10, 11, 13), thumb)
+    dots(base, thumb, mw * 0.022, mw * 0.006, (44, 47, 52))
+    right = mask_of(size, lambda m: m.polygon(spline([P(0.90, 0.40), P(0.985, 0.42), P(0.96, 0.66), P(0.90, 0.74),
+                                                      P(0.86, 0.66)]), fill=255))
+    right = ImageChops.multiply(right, body_mask)
+    paint(base, (10, 11, 13), right)
+    dots(base, right, mw * 0.022, mw * 0.006, (44, 47, 52))
 
     d = ImageDraw.Draw(base)
     rim = (58, 63, 70, 255)
     d.line(body + [body[0]], fill=rim, width=int(SS * 1.2), joint="curve")
-
-    # Séparation des boutons gauche/droit et arrière des boutons
-    split = spline([P(0.47, 0.0), P(0.475, 0.12), P(0.48, 0.25), P(0.485, 0.36)], closed=False)
-    d.line(split, fill=(10, 11, 13, 255), width=int(SS * 1.6))
-    rear = spline([P(0.12, 0.40), P(0.30, 0.375), P(0.50, 0.37), P(0.72, 0.375), P(0.915, 0.40)], closed=False)
-    d.line(rear, fill=(12, 13, 15, 255), width=int(SS * 1.6))
-    # Panneau du repose-pouce (texture légèrement différente)
-    thumb = spline([P(0.03, 0.66), P(0.10, 0.56), P(0.13, 0.70), P(0.12, 0.86), P(0.07, 0.86), P(0.025, 0.75)])
-    d.polygon(thumb, fill=(24, 26, 29, 255))
-    # Boutons latéraux et gâchette de sensibilité
-    for y0, y1 in ((0.43, 0.505), (0.515, 0.585)):
-        d.rounded_rectangle((*P(0.085, y0), *P(0.125, y1)), radius=mw * 0.02, fill=(46, 50, 56, 255),
+    seam = (10, 11, 13, 255)
+    # Séparation des clics gauche/droit, puis coupe en diagonale qui sépare les boutons de la paume
+    d.line(spline([P(0.53, 0.0), P(0.535, 0.05)], closed=False), fill=seam, width=int(SS * 1.6))
+    diag = [P(0.97, 0.36), P(0.60, 0.48), P(0.17, 0.70)]
+    d.line(diag, fill=seam, width=int(SS * 2))
+    d.line([(x, y + SS * 2) for x, y in diag], fill=(52, 56, 62, 255), width=SS)  # arête éclairée de la paume
+    # Facettes de l'avant (bords biseautés des clics)
+    d.line([P(0.13, 0.09), P(0.30, 0.16), P(0.36, 0.40)], fill=(26, 28, 32, 255), width=SS)
+    d.line([P(0.86, 0.05), P(0.74, 0.14), P(0.70, 0.40)], fill=(26, 28, 32, 255), width=SS)
+    # Boutons latéraux et palette multifonction (côté pouce)
+    for y0, y1 in ((0.30, 0.37), (0.38, 0.45)):
+        d.rounded_rectangle((*P(0.07, y0), *P(0.11, y1)), radius=mw * 0.02, fill=(46, 50, 56, 255),
                             outline=(14, 15, 17, 255), width=SS)
-    d.rounded_rectangle((*P(0.01, 0.625), *P(0.05, 0.665)), radius=mw * 0.015, fill=(46, 50, 56, 255))
+    d.rounded_rectangle((*P(0.0, 0.47), *P(0.04, 0.52)), radius=mw * 0.015, fill=(46, 50, 56, 255))
 
-    # Molette : logement, roue crantée
-    d.rounded_rectangle((*P(0.43, 0.085), *P(0.565, 0.235)), radius=mw * 0.06, fill=(8, 9, 10, 255))
-    wheel_box = (*P(0.455, 0.095), *P(0.54, 0.225))
-    d.rounded_rectangle(wheel_box, radius=mw * 0.04, fill=(30, 33, 37, 255))
-    for i in range(14):
-        y = wheel_box[1] + (wheel_box[3] - wheel_box[1]) * (i + 0.5) / 14
-        d.line((wheel_box[0] + SS * 2, y, wheel_box[2] - SS * 2, y), fill=(18, 20, 22, 255), width=SS)
-    # Boutons derrière la molette (mode molette, palier DPI)
-    for y0 in (0.255, 0.305):
-        d.rounded_rectangle((*P(0.455, y0), *P(0.54, y0 + 0.035)), radius=mw * 0.02, fill=(40, 44, 49, 255),
-                            outline=(12, 13, 15, 255), width=SS)
+    # Molette : long logement, roue crantée éclairée
+    slot = (*P(0.485, 0.055), *P(0.585, 0.30))
+    d.rounded_rectangle(slot, radius=mw * 0.03, fill=(8, 9, 10, 255))
+    wheel_box = (*P(0.505, 0.075), *P(0.565, 0.255))
+    d.rounded_rectangle(wheel_box, radius=mw * 0.03, fill=(30, 33, 37, 255))
+    for i in range(18):
+        y = wheel_box[1] + (wheel_box[3] - wheel_box[1]) * (i + 0.5) / 18
+        d.line((wheel_box[0] + SS * 2, y, wheel_box[2] - SS * 2, y), fill=(16, 18, 20, 255), width=SS)
+    # Deux boutons derrière la molette (mode de défilement, palier DPI)
+    b1 = (*P(0.5, 0.31), *P(0.57, 0.355))
+    b2 = (*P(0.5, 0.365), *P(0.57, 0.41))
+    d.rounded_rectangle((*P(0.485, 0.30), *P(0.585, 0.42)), radius=mw * 0.025, fill=(8, 9, 10, 255))
+    for bb in (b1, b2):
+        d.rounded_rectangle(bb, radius=mw * 0.015, fill=(40, 44, 49, 255), outline=(12, 13, 15, 255), width=SS)
 
-    # Volume des petites pièces
     small_parts = mask_of(size, lambda m: [m.rounded_rectangle(b, radius=mw * 0.02, fill=255) for b in (
-        (*P(0.085, 0.43), *P(0.125, 0.505)), (*P(0.085, 0.515), *P(0.125, 0.585)),
-        (*P(0.455, 0.255), *P(0.54, 0.29)), (*P(0.455, 0.305), *P(0.54, 0.34)), wheel_box)])
+        (*P(0.07, 0.30), *P(0.11, 0.37)), (*P(0.07, 0.38), *P(0.11, 0.45)), b1, b2, wheel_box)])
     relief(base, small_parts, mw * 0.012, 0.8)
 
     # Zones des boutons (pour afficher les appuis)
-    split_x = P(0.478, 0)[0]
-    front = ImageChops.multiply(body_mask, mask_of(size, lambda m: m.rectangle((0, 0, W, P(0, 0.375)[1]), fill=255)))
-    holes = mask_of(size, lambda m: m.rounded_rectangle((*P(0.43, 0.085), *P(0.565, 0.235)), radius=mw * 0.06, fill=255))
+    split_x = P(0.535, 0)[0]
+    above = mask_of(size, lambda m: m.polygon([P(-0.1, -0.1), P(1.1, -0.1), P(1.1, 0.33), *diag, P(0.17, 0.70),
+                                               P(0.17, 0.0)], fill=255))
+    front = ImageChops.multiply(body_mask, above)
+    holes = mask_of(size, lambda m: m.rounded_rectangle((*P(0.485, 0.055), *P(0.585, 0.42)), radius=mw * 0.03, fill=255))
     front = ImageChops.subtract(front, holes)
     left_btn = ImageChops.multiply(front, mask_of(size, lambda m: m.rectangle((0, 0, split_x, H), fill=255)))
     right_btn = ImageChops.subtract(front, left_btn)
     btn_masks = {
         "left": left_btn, "right": right_btn,
-        "middle": mask_of(size, lambda m: m.rounded_rectangle(wheel_box, radius=mw * 0.04, fill=255)),
-        "forward": mask_of(size, lambda m: m.rounded_rectangle((*P(0.085, 0.43), *P(0.125, 0.505)), radius=mw * 0.02, fill=255)),
-        "back": mask_of(size, lambda m: m.rounded_rectangle((*P(0.085, 0.515), *P(0.125, 0.585)), radius=mw * 0.02, fill=255)),
-        "mode": mask_of(size, lambda m: m.rounded_rectangle((*P(0.455, 0.255), *P(0.54, 0.29)), radius=mw * 0.02, fill=255)),
-        "dpi": mask_of(size, lambda m: m.rounded_rectangle((*P(0.455, 0.305), *P(0.54, 0.34)), radius=mw * 0.02, fill=255)),
+        "middle": mask_of(size, lambda m: m.rounded_rectangle(wheel_box, radius=mw * 0.03, fill=255)),
+        "forward": mask_of(size, lambda m: m.rounded_rectangle((*P(0.07, 0.30), *P(0.11, 0.37)), radius=mw * 0.02, fill=255)),
+        "back": mask_of(size, lambda m: m.rounded_rectangle((*P(0.07, 0.38), *P(0.11, 0.45)), radius=mw * 0.02, fill=255)),
+        "mode": mask_of(size, lambda m: m.rounded_rectangle(b1, radius=mw * 0.015, fill=255)),
+        "dpi": mask_of(size, lambda m: m.rounded_rectangle(b2, radius=mw * 0.015, fill=255)),
     }
 
     # Masques de lumière
-    wheel_light = mask_of(size, lambda m: m.rounded_rectangle((*P(0.462, 0.10), *P(0.533, 0.22)),
-                                                              radius=mw * 0.035, outline=255, width=int(SS * 2.2)))
-    wheel_core = mask_of(size, lambda m: [m.line((P(0.47, 0.10 + 0.12 * (i + 0.5) / 14)[0], P(0, 0.10 + 0.12 * (i + 0.5) / 14)[1],
-                                                  P(0.525, 0)[0], P(0, 0.10 + 0.12 * (i + 0.5) / 14)[1]), fill=110, width=SS)
-                                                  for i in range(14)])
-    logo_c, logo_r = P(0.515, 0.735), mw * 0.10
+    wheel_light = mask_of(size, lambda m: m.rounded_rectangle(wheel_box, radius=mw * 0.03, outline=255,
+                                                              width=int(SS * 2.2)))
+    wheel_core = mask_of(size, lambda m: [m.line((wheel_box[0] + SS * 3, y, wheel_box[2] - SS * 3, y), fill=120, width=SS)
+                                          for y in (wheel_box[1] + (wheel_box[3] - wheel_box[1]) * (i + 0.5) / 9
+                                                    for i in range(9))])
+    logo_c, logo_r = P(0.57, 0.80), mw * 0.10
     logo = logo_mask(size, logo_c[0], logo_c[1], logo_r)
     engrave(base, logo)
-    # Bande inférieure : bord arrière et flancs bas de la souris
-    strip_pts = [p for p in body if p[1] > oy + mh * 0.50]
+    strip_pts = [p for p in body if p[1] > oy + mh * 0.40]
     strip = mask_of(size, lambda m: m.line(strip_pts, fill=255, width=int(mw * 0.035), joint="curve"))
     strip_under = strip.filter(ImageFilter.GaussianBlur(mw * 0.06)).point(lambda v: min(255, v * 2))
     strip_edge = ImageChops.multiply(strip, mask_of(size, lambda m: m.line(body + [body[0]], fill=255, width=int(SS * 2.5))))
@@ -309,23 +335,25 @@ def finish(base, zones, under, w, h, **kw):
 
 
 KEY_ROWS = [
-    # (étiquette, largeur en unités) ; None = espace vide
-    [("Esc", 1), (None, 1), ("F1", 1), ("F2", 1), ("F3", 1), ("F4", 1), (None, .5), ("F5", 1), ("F6", 1), ("F7", 1), ("F8", 1),
-     (None, .5), ("F9", 1), ("F10", 1), ("F11", 1), ("F12", 1), (None, .25), ("Imp", 1), ("Arr", 1), ("Pse", 1)],
-    [("²", 1), ("1", 1), ("2", 1), ("3", 1), ("4", 1), ("5", 1), ("6", 1), ("7", 1), ("8", 1), ("9", 1), ("0", 1), (")", 1),
-     ("=", 1), ("⌫", 2), (None, .25), ("Ins", 1), ("Déb", 1), ("Pg↑", 1), (None, .25), ("Num", 1), ("/", 1), ("*", 1), ("-", 1)],
-    [("Tab", 1.5), ("A", 1), ("Z", 1), ("E", 1), ("R", 1), ("T", 1), ("Y", 1), ("U", 1), ("I", 1), ("O", 1), ("P", 1),
-     ("^", 1), ("$", 1), ("↵", 1.5), (None, .25), ("Suppr", 1), ("Fin", 1), ("Pg↓", 1), (None, .25), ("7", 1), ("8", 1),
-     ("9", 1), ("+", 1)],
-    [("Verr", 1.75), ("Q", 1), ("S", 1), ("D", 1), ("F", 1), ("G", 1), ("H", 1), ("J", 1), ("K", 1), ("L", 1), ("M", 1),
+    # (étiquette, largeur en unités) ; None = espace vide. Légendes du DeathStalker V2 Pro français.
+    [("echap", 1), (None, 1), ("F1", 1), ("F2", 1), ("F3", 1), ("F4", 1), (None, .5), ("F5", 1), ("F6", 1), ("F7", 1),
+     ("F8", 1), (None, .5), ("F9", 1), ("F10", 1), ("F11", 1), ("F12", 1), (None, .25), ("arrêt", 1), ("impr", 1),
+     ("pause", 1)],
+    [("²", 1), ("&", 1), ("é", 1), ('"', 1), ("'", 1), ("(", 1), ("-", 1), ("è", 1), ("_", 1), ("ç", 1), ("à", 1),
+     (")", 1), ("=", 1), ("⟵", 2), (None, .25), ("inser", 1), ("début", 1), ("pg↑", 1), (None, .25), ("ver num", 1),
+     ("/", 1), ("*", 1), ("-", 1)],
+    [("↹", 1.5), ("A", 1), ("Z", 1), ("E", 1), ("R", 1), ("T", 1), ("Y", 1), ("U", 1), ("I", 1), ("O", 1), ("P", 1),
+     ("^", 1), ("$", 1), (None, .25), ("entrée", 1.25), (None, .25), ("suppr", 1), ("fin", 1), ("pg↓", 1), (None, .25),
+     ("7", 1), ("8", 1), ("9", 1), ("+", 1)],
+    [("⇩", 1.75), ("Q", 1), ("S", 1), ("D", 1), ("F", 1), ("G", 1), ("H", 1), ("J", 1), ("K", 1), ("L", 1), ("M", 1),
      ("ù", 1), ("*", 1), (None, 1.25), (None, .25), (None, 3), (None, .25), ("4", 1), ("5", 1), ("6", 1), (None, 1)],
     [("⇧", 1.25), ("<", 1), ("W", 1), ("X", 1), ("C", 1), ("V", 1), ("B", 1), ("N", 1), (",", 1), (";", 1), (":", 1),
      ("!", 1), ("⇧", 2.75), (None, .25), (None, 1), ("↑", 1), (None, 1), (None, .25), ("1", 1), ("2", 1), ("3", 1),
-     ("↵", 1)],
-    [("Ctrl", 1.25), ("⊞", 1.25), ("Alt", 1.25), ("", 6.25), ("AltGr", 1.25), ("Fn", 1.25), ("☰", 1.25), ("Ctrl", 1.25),
-     (None, .25), ("←", 1), ("↓", 1), ("→", 1), (None, .25), ("0", 2), (".", 1), (None, 1)],
+     ("entrée", 1)],
+    [("ctrl", 1.25), ("⊞", 1.25), ("alt", 1.25), ("", 6.25), ("alt", 1.25), ("fn", 1.25), ("☰", 1.25), ("ctrl", 1.25),
+     (None, .25), ("<", 1), ("v", 1), (">", 1), (None, .25), ("0", 2), (".", 1), (None, 1)],
 ]
-TALL_KEYS = {(2, 22), (4, 21)}
+TALL_KEYS = {(2, 14), (2, 23), (4, 21)}  # entrée (ISO, sur deux rangées), « + » et « entrée » du pavé
 
 
 def _sc(*codes):
@@ -338,7 +366,7 @@ def _vk(*codes):
 
 # Un code par touche étiquetée de KEY_ROWS, dans le même ordre
 KEY_CODES = [
-    _sc(0x01, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43, 0x44, 0x57, 0x58) + _vk(0x2C) + _sc(0x46) + _vk(0x13),
+    _sc(0x01, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40, 0x41, 0x42, 0x43, 0x44, 0x57, 0x58, 0x46) + _vk(0x2C, 0x13),
     _sc(0x29, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E)
     + _vk(0x2D, 0x24, 0x21, 0x90, 0x6F, 0x6A, 0x6D),
     _sc(0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B) + _vk(0x0D, 0x2E, 0x23, 0x22,
@@ -371,9 +399,6 @@ def render_keyboard(w, h):
     grain(base, plate_mask, 5)
     d = ImageDraw.Draw(base)
     d.rounded_rectangle(plate_box, radius=u * .45, outline=(66, 70, 76, 255), width=int(SS * 1.2))
-    # Bande de face avant (brossée)
-    d.rounded_rectangle((ox + u * .3, oy + kb_h - u * .42, ox + kb_w - u * .3, oy + kb_h - u * .3), radius=u * .05,
-                        fill=(52, 55, 60, 255))
 
     kx0, ky0 = ox + u * .45, oy + u * .55
     keys, legend_draws = [], []
@@ -402,18 +427,39 @@ def render_keyboard(w, h):
     ld = ImageDraw.Draw(legend)
     for label, x0, y0, x1, y1 in legend_draws:
         f = small if len(label) <= 2 else tiny
-        ld.text((x0 + u * .14, y0 + u * .1), label, fill=255, font=f)
-        d.text((x0 + u * .14, y0 + u * .1), label, fill=(120, 126, 134, 255), font=f)
-    # Boutons média et molette de volume (en haut à droite)
+        # légende centrée sur le dessus de la touche (la touche « entrée » ISO : dans sa moitié haute)
+        cy = (y0 + min(y1, y0 + u * .9)) / 2 - SS
+        ld.text(((x0 + x1) / 2, cy), label, fill=255, font=f, anchor="mm")
+        d.text(((x0 + x1) / 2, cy), label, fill=(120, 126, 134, 255), font=f, anchor="mm")
+    # Bouton multimédia rond et molette de volume, au-dessus du pavé numérique
     mx = kx0 + (units_w - 4) * u
-    for i in range(3):
-        d.rounded_rectangle((mx + i * u * .62, oy + u * .14, mx + i * u * .62 + u * .48, oy + u * .36), radius=u * .1,
-                            fill=(20, 21, 24, 255))
-    roller = (mx + u * 2.05, oy + u * .12, mx + u * 3.95, oy + u * .38)
-    d.rounded_rectangle(roller, radius=u * .13, fill=(8, 9, 10, 255))
-    for i in range(16):
-        xx = roller[0] + (roller[2] - roller[0]) * (i + .5) / 16
-        d.line((xx, roller[1] + SS * 2, xx, roller[3] - SS * 2), fill=(44, 47, 52, 255), width=SS)
+    top = ky0 + u * .07
+    bc = (mx + u * .5, top + u * .42)
+    d.ellipse((bc[0] - u * .36, bc[1] - u * .36, bc[0] + u * .36, bc[1] + u * .36), fill=(6, 6, 7, 255),
+              outline=(70, 74, 80, 255), width=SS)
+    d.ellipse((bc[0] - u * .26, bc[1] - u * .26, bc[0] + u * .26, bc[1] + u * .26), fill=(26, 28, 31, 255))
+    roller = (mx + u * 1.05, top + u * .12, mx + u * 3.95, top + u * .72)
+    d.rounded_rectangle(roller, radius=u * .28, fill=(8, 9, 10, 255))
+    d.rounded_rectangle((roller[0] + u * .25, roller[1] + SS * 2, roller[2] - u * .05, roller[3] - SS * 2),
+                        radius=u * .22, fill=(34, 36, 40, 255))
+    for i in range(30):
+        xx = roller[0] + u * .35 + (roller[2] - roller[0] - u * .5) * (i + .5) / 30
+        d.line((xx, roller[1] + SS * 3, xx, roller[3] - SS * 3), fill=(18, 19, 21, 255), width=SS)
+    # Voyants d'état au-dessus de la flèche haut
+    ledx, ledy = kx0 + 15.25 * u, ky0 + (3 + .35) * u + u * .25
+    for i in range(5):
+        x = ledx + u * (.45 + i * .5)
+        d.ellipse((x - SS * 1.5, ledy - SS * 1.5, x + SS * 1.5, ledy + SS * 1.5), fill=(150, 156, 164, 255))
+    # Logo RazerLite gravé sur le bord avant, sous la barre d'espace
+    from . import logo
+    mark_h = max(6, int(u * .32))
+    wm = logo.wordmark(mark_h).getchannel("A")
+    wx = int(kx0 + 6.6 * u - wm.size[0] / 2)
+    wy = int(oy + kb_h - u * .36 - mark_h / 2)
+    engr = Image.new("L", size, 0)
+    engr.paste(wm, (wx, wy))
+    paint(base, (70, 74, 80), engr)
+    d = ImageDraw.Draw(base)
 
     keyzone = mask_of(size, lambda m: [m.rounded_rectangle((x0, y0, x1, y1), radius=u * .1, fill=255) for x0, y0, x1, y1, _ in keys])
     gaps = ImageChops.subtract(keyzone.filter(ImageFilter.MaxFilter(int(u * .12) | 1)),
@@ -429,99 +475,112 @@ def render_keyboard(w, h):
 
 
 def render_headset(w, h):
-    """Kraken V3 HyperSense vu de trois quarts : coque gauche ovale avec logo éclairé, arceau rembourré
-    et fourches en alu, micro amovible à gauche, coque droite en retrait."""
+    """Kraken V3 HyperSense de trois quarts, d'après photo : coques rondes à grille perforée, disque central
+    lumineux avec logo et anneau, bloc de réglage « HYPERSENSE » en bout d'arceau, fourche fine autour de la coque,
+    micro amovible à bonnette mousse et câble sous la coque gauche."""
     W, H = w * SS, h * SS
-    s = min(W / 300, H / 330)
-    cx, cy = W / 2, H / 2
+    s = min(W / 300, H / 330) * 0.88
+    cx, cy = W / 2 + 4 * s, H / 2 - 4 * s
     size = (W, H)
     base = Image.new("RGBA", size, (0, 0, 0, 0))
 
     def S(x, y):
         return (cx + x * s, cy + y * s)
 
-    metal, metal_dark = (128, 134, 142, 255), (70, 74, 80, 255)
-    left_box = (*S(-112, -22), *S(8, 132))     # coque gauche (face extérieure, vers nous)
-    right_box = (*S(52, -8), *S(132, 112))     # coque droite (on voit son coussin)
+    metal_dark = (40, 43, 48, 255)
+    cc, cr = (-46, 58), 70                      # coque gauche, ronde, vers nous
+    left_box = (*S(cc[0] - cr, cc[1] - cr), *S(cc[0] + cr, cc[1] + cr))
+    right_box = (*S(56, -2), *S(132, 112))      # coque droite vue de biais (coussin visible)
 
-    shadow = mask_of(size, lambda d: [d.ellipse((*S(-104, -6), *S(20, 146)), fill=200),
-                                      d.ellipse((*S(56, 6), *S(140, 124)), fill=140)])
+    shadow = mask_of(size, lambda d: [d.ellipse((*S(cc[0] - cr + 6, cc[1] - cr + 12), *S(cc[0] + cr + 10, cc[1] + cr + 14)),
+                                                fill=200), d.ellipse((*S(60, 10), *S(140, 124)), fill=140)])
     paint(base, (0, 0, 0), shadow.filter(ImageFilter.GaussianBlur(12 * s)))
     d = ImageDraw.Draw(base)
 
-    # Coque droite, en retrait : coussin en simili-cuir vers nous, bord de coque
-    d.ellipse(right_box, fill=(22, 23, 26, 255), outline=(52, 56, 62, 255), width=int(2 * s))
-    d.ellipse((*S(62, 4), *S(126, 102)), fill=(10, 10, 12, 255))
-    d.ellipse((*S(76, 22), *S(114, 86)), fill=(26, 27, 30, 255))  # tissu au centre du coussin
-    # Fourche droite
-    d.arc((*S(44, -18), *S(140, 122)), start=190, end=350, fill=metal_dark, width=int(5 * s))
-    d.line((S(92, -18), S(92, -40)), fill=metal_dark, width=int(6 * s))
+    # Coque droite en retrait : coussin épais vers nous
+    d.ellipse(right_box, fill=(20, 21, 24, 255), outline=(50, 54, 60, 255), width=int(2 * s))
+    d.ellipse((*S(64, 8), *S(126, 104)), fill=(9, 9, 11, 255))
+    d.ellipse((*S(78, 26), *S(114, 86)), fill=(24, 25, 28, 255))
+    d.arc((*S(48, -12), *S(140, 120)), start=195, end=345, fill=metal_dark, width=int(5 * s))
+    d.rounded_rectangle((*S(80, -50), *S(106, -14)), radius=3 * s, fill=(22, 23, 26, 255))
 
-    # Arceau : bandeau extérieur + coussin dessous, de la coque gauche à la coque droite
-    outer = spline([S(-52, -62), S(-50, -118), S(-14, -152), S(40, -146), S(80, -110), S(92, -48)], closed=False)
-    inner = spline([S(-30, -60), S(-28, -104), S(-6, -128), S(36, -124), S(64, -96), S(72, -46)], closed=False)
-    band = outer + inner[::-1]
-    band_mask = mask_of(size, lambda m: m.polygon(band, fill=255))
-    band_img = gradient(size, (44, 47, 52), (18, 19, 22)).convert("RGBA")
+    # Arceau : bandeau large et plat, coussin dessous
+    outer = spline([S(-58, -78), S(-56, -124), S(-18, -156), S(40, -150), S(84, -114), S(96, -52)], closed=False)
+    inner = spline([S(-34, -78), S(-32, -110), S(-8, -132), S(36, -128), S(68, -100), S(76, -50)], closed=False)
+    band_mask = mask_of(size, lambda m: m.polygon(outer + inner[::-1], fill=255))
+    band_img = gradient(size, (40, 43, 48), (16, 17, 20)).convert("RGBA")
     band_img.putalpha(band_mask)
     base.alpha_composite(band_img)
     relief(base, band_mask, 8 * s, 0.8)
     grain(base, band_mask, 6)
     d = ImageDraw.Draw(base)
-    cushion = spline([S(-36, -62), S(-34, -106), S(-8, -132), S(37, -128), S(68, -98), S(77, -46)], closed=False)
-    d.line(cushion, fill=(12, 12, 14, 255), width=int(9 * s), joint="curve")
-    d.line(outer, fill=(70, 74, 81, 255), width=int(2 * s), joint="curve")
-    # surpiqûre du bandeau
-    stitch = spline([S(-44, -64), S(-42, -114), S(-12, -144), S(39, -138), S(74, -106), S(84, -50)], closed=False)
-    for i in range(0, len(stitch) - 1, 2):
-        d.line((stitch[i], stitch[i + 1]), fill=(58, 61, 67, 255), width=max(1, int(1.2 * s)))
-    # Curseur de taille en alu (gauche)
-    d.rounded_rectangle((*S(-56, -66), *S(-44, -30)), radius=3 * s, fill=metal, outline=metal_dark, width=int(s))
-    for k in range(4):
-        d.line((S(-54, -60 + k * 7), S(-46, -60 + k * 7)), fill=metal_dark, width=max(1, int(s)))
+    d.line(spline([S(-40, -78), S(-38, -112), S(-10, -138), S(37, -134), S(72, -104), S(81, -50)], closed=False),
+           fill=(10, 10, 12, 255), width=int(8 * s), joint="curve")
+    d.line(outer, fill=(66, 70, 77, 255), width=int(2 * s), joint="curve")
 
-    # Fourche gauche en U autour du haut de la coque
-    d.arc((*S(-122, -32), *S(18, 140)), start=185, end=355, fill=metal, width=int(6 * s))
-    d.arc((*S(-122, -32), *S(18, 140)), start=185, end=355, fill=(170, 176, 184, 255), width=max(1, int(1.5 * s)))
-    for px in (-118, 14):
-        d.ellipse((*S(px - 6, 40), *S(px + 6, 52)), fill=metal_dark)  # pivots
+    # Bloc de réglage en bout d'arceau, avec la plaque « HYPERSENSE »
+    blk = (*S(-74, -84), *S(-18, -40))
+    d.rounded_rectangle(blk, radius=4 * s, fill=(22, 23, 26, 255), outline=(60, 64, 70, 255), width=max(1, int(s)))
+    plaque = (*S(-70, -62), *S(-22, -48))
+    d.rounded_rectangle(plaque, radius=6 * s, fill=(12, 13, 15, 255), outline=(70, 74, 80, 255), width=max(1, int(s)))
+    f = find_font(max(5, int(5.2 * s)), bold=True)
+    d.text(((plaque[0] + plaque[2]) / 2 + 5 * s, (plaque[1] + plaque[3]) / 2), "HYPERSENSE", font=f,
+           fill=(150, 155, 162, 255), anchor="mm")
+    d.ellipse((plaque[0] + 3 * s, plaque[1] + 3.5 * s, plaque[0] + 10 * s, plaque[3] - 3.5 * s), outline=(150, 155, 162, 255),
+              width=max(1, int(s)))
+    # graduations de taille sous le bloc
+    for k, x in enumerate((-54, -46, -38)):
+        d.line((S(x, -34), S(x + 5, -34)), fill=(120, 125, 132, 255), width=max(1, int(s)))
 
-    # Coussin gauche (dépasse derrière la coque)
-    d.ellipse((*S(-100, -14), *S(18, 136)), fill=(11, 11, 13, 255))
-    # Coque gauche
+    # Fourche fine qui entoure le haut de la coque
+    d.arc((*S(cc[0] - cr - 8, cc[1] - cr - 8), *S(cc[0] + cr + 8, cc[1] + cr + 8)), start=180, end=360,
+          fill=(26, 28, 31, 255), width=int(7 * s))
+    d.arc((*S(cc[0] - cr - 8, cc[1] - cr - 8), *S(cc[0] + cr + 8, cc[1] + cr + 8)), start=180, end=360,
+          fill=(70, 74, 80, 255), width=max(1, int(s)))
+    d.line((S(-46, -40), S(-46, cc[1] - cr - 8)), fill=(26, 28, 31, 255), width=int(10 * s))
+
+    # Coussin (dépasse derrière la coque)
+    d.ellipse((*S(cc[0] - cr + 10, cc[1] - cr - 4), *S(cc[0] + cr + 12, cc[1] + cr + 4)), fill=(10, 10, 12, 255))
+    # Coque : bord lisse, grille perforée
     cup_mask = mask_of(size, lambda m: m.ellipse(left_box, fill=255))
-    shell = gradient(size, (46, 49, 55), (17, 18, 21)).convert("RGBA")
+    shell = gradient(size, (40, 43, 48), (16, 17, 20)).convert("RGBA")
     shell.putalpha(cup_mask)
     base.alpha_composite(shell)
-    sheen = radial(size, S(-72, 20), (60 * s, 70 * s), 70, 0)
-    paint(base, (255, 255, 255), ImageChops.multiply(sheen, cup_mask).point(lambda v: v // 4))
-    relief(base, cup_mask, 14 * s, 0.75)
-    grain(base, cup_mask, 6)
+    relief(base, cup_mask, 12 * s, 0.75)
+    grille = mask_of(size, lambda m: m.ellipse((*S(cc[0] - cr + 9, cc[1] - cr + 9), *S(cc[0] + cr - 9, cc[1] + cr - 9)),
+                                               fill=255))
+    paint(base, (14, 15, 17), grille)
+    dots(base, grille, 4.2 * s, 0.9 * s, (52, 55, 60))
+    sheen = radial(size, S(cc[0] - 25, cc[1] - 30), (60 * s, 50 * s), 70, 0)
+    paint(base, (255, 255, 255), ImageChops.multiply(sheen, cup_mask).point(lambda v: v // 5))
     d = ImageDraw.Draw(base)
     d.ellipse(left_box, outline=(70, 74, 81, 255), width=int(2 * s))
-    plate = (*S(-92, 2), *S(-12, 108))
-    d.ellipse(plate, fill=(21, 22, 25, 255), outline=(44, 47, 53, 255), width=int(2 * s))
+    # Disque central brillant
+    dr = 30
+    disc = (*S(cc[0] - dr, cc[1] - dr), *S(cc[0] + dr, cc[1] + dr))
+    disc_mask = mask_of(size, lambda m: m.ellipse(disc, fill=255))
+    disc_img = gradient(size, (30, 32, 36), (8, 8, 10)).convert("RGBA")
+    disc_img.putalpha(disc_mask)
+    base.alpha_composite(disc_img)
+    paint(base, (255, 255, 255), ImageChops.multiply(radial(size, S(cc[0] - 10, cc[1] - 14), (22 * s, 14 * s), 60, 0),
+                                                     disc_mask).point(lambda v: v // 3))
 
-    # Commandes au dos de la coque gauche : molette de volume et bouton micro
-    d.rounded_rectangle((*S(2, 66), *S(12, 92)), radius=4 * s, fill=(26, 28, 31, 255), outline=(8, 8, 9, 255),
-                        width=max(1, int(s)))
-    for k in range(6):
-        d.line((S(3, 69 + k * 4), S(11, 69 + k * 4)), fill=(50, 53, 58, 255), width=max(1, int(s)))
-    d.rounded_rectangle((*S(-2, 98), *S(8, 110)), radius=3 * s, fill=(34, 36, 40, 255), outline=(8, 8, 9, 255),
-                        width=max(1, int(s)))
+    # Micro amovible : prise à l'avant bas, perche souple, bonnette mousse
+    boom = spline([S(-96, 104), S(-116, 120), S(-128, 136), S(-132, 150)], closed=False)
+    d.line(boom, fill=(14, 15, 17, 255), width=int(6 * s), joint="curve")
+    d.ellipse((*S(-102, 98), *S(-90, 110)), fill=(30, 32, 36, 255), outline=(8, 8, 9, 255), width=max(1, int(s)))
+    foam = mask_of(size, lambda m: m.ellipse((*S(-146, 140), *S(-120, 164)), fill=255))
+    paint(base, (16, 17, 19), foam)
+    grain(base, foam, 14)
+    # Câble sous la coque
+    d.line(spline([S(-40, cc[1] + cr - 2), S(-38, 150), S(-34, 166)], closed=False), fill=(12, 12, 14, 255),
+           width=int(5 * s), joint="curve")
 
-    # Micro amovible : prise à l'avant bas de la coque, perche souple, capsule
-    boom = spline([S(-100, 104), S(-122, 122), S(-134, 142), S(-128, 158)], closed=False)
-    d.line(boom, fill=(14, 15, 17, 255), width=int(7 * s), joint="curve")
-    d.line(boom, fill=(48, 51, 56, 255), width=max(1, int(1.5 * s)), joint="curve")
-    d.ellipse((*S(-106, 96), *S(-94, 110)), fill=(30, 32, 36, 255), outline=(8, 8, 9, 255), width=max(1, int(s)))
-    d.rounded_rectangle((*S(-138, 150), *S(-116, 164)), radius=6 * s, fill=(20, 21, 24, 255),
-                        outline=(60, 64, 70, 255), width=max(1, int(s)))
-
-    logo_c = S(-52, 55)
-    logo = logo_mask(size, logo_c[0], logo_c[1], 30 * s)
+    logo = logo_mask(size, S(*cc)[0], S(*cc)[1], 21 * s)
     engrave(base, logo)
-    zones = {"Casque": [(logo, 1.0), (logo.filter(ImageFilter.GaussianBlur(8 * s)), 0.9)]}
+    ring = mask_of(size, lambda m: m.ellipse(disc, outline=255, width=int(3 * s)))
+    zones = {"Casque": [(logo, 1.0), (logo.filter(ImageFilter.GaussianBlur(6 * s)), 0.8),
+                        (ring, 1.0), (ring.filter(ImageFilter.GaussianBlur(6 * s)), 0.8)]}
     return finish(base, zones, {}, w, h)
 
 
