@@ -697,9 +697,29 @@ def render_keyboard_photo(w, h):
                     key_light=light, key_labels=labels)
 
 
+def render_headset_photo(w, h):
+    """Kraken V3 HyperSense de profil, d'après l'image du produit : l'anneau garde sa vraie lumière,
+    le serpent Razer est remplacé par le symbole RazerLite."""
+    img, meta = _photo("headset")
+    k, off, size = _fit(img.size, w, h, 0.95)
+    canvas = (w, h)
+    shape = _place(img, size, off, canvas)
+    base = Image.new("RGBA", canvas, (0, 0, 0, 0))
+    shadow = Image.new("L", canvas, 0)
+    shadow.paste(shape.getchannel("A"), (round(w * 0.008), round(h * 0.012)))
+    paint(base, (0, 0, 0), shadow.filter(ImageFilter.GaussianBlur(w * 0.025)))
+    base.alpha_composite(shape)
+    ring = _place(Image.open(os.path.join(DEVICE_ART, "headset_light.png")).convert("L"), size, off, canvas)
+    lx, ly, lr = meta["logo"]
+    logo = logo_mask(canvas, off[0] + lx * k, off[1] + ly * k, lr * k)
+    engrave(base, logo)
+    zones = {"Casque": [(logo, 1.0), (logo.filter(ImageFilter.GaussianBlur(w * 0.01)), 0.8), (ring, 1.0)]}
+    return Rendered(base, zones, {})
+
+
 RENDERERS = {"mouse": render_mouse_photo if _photo("mouse") else render_mouse,
              "keyboard": render_keyboard_photo if _photo("keyboard") else render_keyboard,
-             "headset": render_headset}
+             "headset": render_headset_photo if _photo("headset") else render_headset}
 _cache = {}
 
 
