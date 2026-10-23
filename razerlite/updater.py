@@ -124,7 +124,18 @@ def _install_exe(info, progress):
         'start "" "%EXE%" --after-update\r\n'
         '(goto) 2>nul & del "%~f0"\r\n',
         encoding="mbcs")
-    subprocess.Popen(["cmd", "/c", str(script)], creationflags=NO_WINDOW | DETACHED, close_fds=True)
+    subprocess.Popen(["cmd", "/c", str(script)], creationflags=NO_WINDOW | DETACHED, close_fds=True, env=clean_env())
+
+
+def clean_env():
+    """Environnement sans les variables internes de l'.exe en cours.
+
+    Sinon le nouvel .exe se croit « enfant » de l'ancien et cherche ses fichiers dans le dossier
+    temporaire _MEI… de l'ancien, effacé à sa fermeture (erreur « Failed to load Python DLL »).
+    """
+    env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("_PYI", "_MEIPASS"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
 
 
 def _install_pack(info, progress):

@@ -35,6 +35,14 @@ class UpdaterTest(unittest.TestCase):
         with mock.patch.object(updater, "repo", return_value=None):
             self.assertIsNone(updater.check())
 
+    def test_clean_env(self):
+        with mock.patch.dict("os.environ", {"_PYI_APPLICATION_HOME_DIR": "x", "_MEIPASS2": "y", "PATH": "p"}):
+            env = updater.clean_env()
+        self.assertNotIn("_PYI_APPLICATION_HOME_DIR", env)
+        self.assertNotIn("_MEIPASS2", env)
+        self.assertEqual(env["PATH"], "p")
+        self.assertEqual(env["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+
     def test_extract_pack(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
