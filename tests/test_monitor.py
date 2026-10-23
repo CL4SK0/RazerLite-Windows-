@@ -21,13 +21,20 @@ class MonitorTest(unittest.TestCase):
     def test_same_channels(self):
         self.assertEqual(monitor.process(pcm(1, 2), 1, 1, 1), pcm(1, 2))
 
-    def test_buffer_never_grows_past_limit(self):
-        buf = monitor.Buffer(8, frame=4)
-        buf.write(pcm(1, 1, 2, 2))
-        buf.write(pcm(3, 3, 4, 4))  # 16 octets : les 8 plus anciens sont jetés
-        self.assertEqual(buf.read(8), pcm(3, 3, 4, 4))
+    def test_buffer_keeps_at_most_one_block_ahead(self):
+        buf = monitor.Buffer(frame=4)
+        for i in range(5):  # le micro prend de l'avance sur le casque
+            buf.write(pcm(i, i))
+        self.assertEqual(buf.read(4), pcm(3, 3))  # les plus anciens ont été jetés
+        self.assertEqual(buf.read(4), pcm(4, 4))
         self.assertEqual(buf.read(4), bytes(4))  # vide : silence
 
+    def test_buffer_drift_does_not_accumulate(self):
+        buf = monitor.Buffer(frame=4)
+        for _ in range(100):  # le micro livre un peu plus que ce que lit le casque
+            buf.write(pcm(1, 1, 1, 1, 1, 1))
+            buf.read(8)
+        self.assertLessEqual(len(buf.data), 12)
 
 if __name__ == "__main__":
     unittest.main()
