@@ -2,6 +2,7 @@
 
 import copy
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import colorchooser, messagebox
@@ -553,6 +554,14 @@ class App(ctk.CTk):
             self.iconphoto(True, self._icon)
         except Exception:
             pass
+        # Sous Windows, la barre des tâches lit l'icône .ico. L'appel à iconbitmap empêche aussi
+        # customtkinter de remettre sa propre icône bleue 200 ms après l'ouverture.
+        path = logo.ico_path()
+        if sys.platform == "win32" and path:
+            try:
+                self.iconbitmap(default=path)
+            except tk.TclError:
+                pass
 
     def build(self):
         self.columnconfigure(1, weight=1)
@@ -992,6 +1001,13 @@ class App(ctk.CTk):
 
 
 def run(start_in_tray=False):
+    if sys.platform == "win32":
+        # Identité propre : la barre des tâches n'affiche plus RazerLite comme « Python » avec son icône
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("RazerLite.App")
+        except (AttributeError, OSError):
+            pass
     app = App(start_in_tray=start_in_tray)
     app.mainloop()
     return 0

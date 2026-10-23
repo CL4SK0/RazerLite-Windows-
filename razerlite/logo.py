@@ -67,5 +67,32 @@ def app_icon(size=256):
     return out.resize((size, size), Image.LANCZOS)
 
 
+def small_icon(size):
+    """Petites tailles (barre des tâches, titre) : le symbole seul, agrandi au maximum pour rester lisible."""
+    src = _mark_source()
+    sym = src.crop(src.getbbox())
+    S = size * 4
+    sym.thumbnail((S, S), Image.LANCZOS)
+    out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    out.alpha_composite(sym, ((S - sym.width) // 2, (S - sym.height) // 2))
+    return out.resize((size, size), Image.LANCZOS)
+
+
+ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
+
+
 def save_ico(path):
-    app_icon(256).save(path, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    # Images au format BMP (et non PNG) : l'Explorateur et la barre des tâches les affichent partout.
+    frames = [small_icon(s) if s <= 32 else app_icon(s) for s in ICO_SIZES]
+    frames[-1].save(path, sizes=[(s, s) for s in ICO_SIZES], append_images=frames[:-1], bitmap_format="bmp")
+
+
+def ico_path():
+    """Icône .ico livrée avec le programme (créée à la volée si elle manque)."""
+    path = os.path.join(ASSETS, "RazerLite.ico")
+    if not os.path.exists(path):
+        try:
+            save_ico(path)
+        except OSError:
+            return None
+    return path

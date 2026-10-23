@@ -5,3 +5,4 @@ dist/
 RazerLite-pack.zip
 razerlite/_build.py
 tests.log
+version_info.txt

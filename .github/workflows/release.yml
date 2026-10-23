@@ -39,8 +39,8 @@ jobs:
 
       - name: Fabrication de RazerLite.exe
         run: |
-          python -c "from razerlite import logo; logo.save_ico('RazerLite.ico')"
-          python -m PyInstaller --noconfirm --onefile --windowed --collect-data customtkinter --add-data "razerlite\assets;razerlite\assets" --icon RazerLite.ico --name RazerLite RazerLite.pyw
+          python -c "from razerlite import logo; logo.save_ico('RazerLite.ico'); logo.save_ico('razerlite/assets/RazerLite.ico')"
+          python -m PyInstaller --noconfirm --onefile --windowed --collect-data customtkinter --add-data "razerlite\assets;razerlite\assets" --icon RazerLite.ico --version-file version_info.txt --name RazerLite RazerLite.pyw
 
       - name: Pack (version script)
         run: python tools/make_pack.py RazerLite-pack.zip
