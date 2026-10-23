@@ -11,7 +11,7 @@ from tkinter import colorchooser, messagebox
 
 import customtkinter as ctk
 
-from . import __version__, audio, instance, logo, profiles, protocol, updater
+from . import __version__, audio, instance, logo, monitor, profiles, protocol, updater
 from . import theme as t
 from .devices import RazerError, find_devices
 from .osd import DpiOsd
@@ -48,6 +48,10 @@ def card(master, **kw):
 
 def section(master, text):
     return ctk.CTkLabel(master, text=text.upper(), font=font(11, "bold"), text_color=t.MUTED, anchor="w")
+
+
+# Qui fait le retour micro : le casque (firmware) ou RazerLite (micro rejoué par le PC)
+SIDETONE_MODES = {"Casque": "headset", "RazerLite (faible délai)": "app"}
 
 
 def segmented(master, values, command, **kw):
@@ -536,19 +540,14 @@ class AudioPage(Page):
         self.side_slider.set(side.get("level", 50))
         self.side_slider.pack(fill="x", pady=(6, 0))
 
-        lab = ctk.CTkFrame(body, fg_color="transparent")
-        lab.pack(fill="x", pady=(8, 0))
-        ctk.CTkLabel(lab, text="Labo :", font=font(11), text_color=t.MUTED).pack(side="left")
-        for name, prefix in protocol.SIDETONE_LAB:
-            ctk.CTkButton(lab, text=name, width=30, height=24, font=font(11), fg_color=t.CARD_HI,
-                          hover_color=t.BORDER, text_color=t.TEXT, corner_radius=6,
-                          command=lambda n=name, x=prefix: self.try_variant(n, x)).pack(side="left", padx=2)
-        ctk.CTkButton(lab, text="Normal", width=60, height=24, font=font(11), fg_color=t.CARD_HI,
-                      hover_color=t.BORDER, text_color=t.TEXT, corner_radius=6,
-                      command=lambda: self.set_sidetone()).pack(side="left", padx=(8, 0))
-        ctk.CTkLabel(body, text="Expérimental : essaie A à F, parle, et note celle qui change le son. "
-                     "« Normal » revient au retour de Synapse.", font=font(10), text_color=t.MUTED,
-                     wraplength=320, justify="left", anchor="w").pack(anchor="w")
+        self.side_mode = segmented(body, list(SIDETONE_MODES), self.set_sidetone_mode)
+        self.side_mode.set(next((k for k, v in SIDETONE_MODES.items() if v == side.get("mode", "headset")),
+                                "Casque"))
+        self.side_mode.pack(fill="x", pady=(10, 0))
+        self.side_info = ctk.CTkLabel(body, text="", font=font(11), text_color=t.MUTED, wraplength=320,
+                                      justify="left", anchor="w")
+        self.side_info.pack(anchor="w", pady=(4, 0))
+        self.show_sidetone_info()
 
         section(body, "Nettoyage de la voix").pack(anchor="w", pady=(18, 4))
         for key, label, hint in (
@@ -565,13 +564,22 @@ class AudioPage(Page):
         section(body, "Égaliseur du micro").pack(anchor="w", pady=(18, 0))
         self.eq_block(body, "mic_eq", audio.MIC_PRESETS, "Neutre", bands=False)
 
-    def try_variant(self, name, prefix):
-        level = self.cfg.get("sidetone", {}).get("level", 50)
-        try:
-            self.device.send_report(protocol.kraken_sidetone_variant(prefix, level))
-            self.app.status(f"Labo retour micro : variante {name} ({prefix}) envoyée. Parle et écoute.")
-        except RazerError as exc:
-            self.app.status(f"Variante {name} refusée par le casque : {exc}", True)
+    def set_sidetone_mode(self, label):
+        self.cfg.setdefault("sidetone", {"on": False, "level": 50})["mode"] = SIDETONE_MODES[label]
+        self.set_sidetone()
+
+    def show_sidetone_info(self):
+        side = self.cfg.get("sidetone", {})
+        if side.get("mode") != "app":
+            text = "Casque : retour fait par le Kraken, comme dans Synapse."
+        elif self.app.monitor.running:
+            text = f"RazerLite : ta voix est renvoyée dans le casque (délai ≈ {self.app.monitor.latency_ms} ms)."
+        elif self.app.monitor.error:
+            text = f"RazerLite : {self.app.monitor.error}"
+        else:
+            text = "RazerLite : retour fait par le PC, sans le délai du firmware du casque."
+        self.side_info.configure(text=text, text_color=t.DANGER if side.get("mode") == "app" and
+                                 self.app.monitor.error else t.MUTED)
 
     def set_sidetone(self, level=None):
         side = self.cfg.setdefault("sidetone", {"on": False, "level": 50})
@@ -711,6 +719,7 @@ class App(ctk.CTk):
         self.firmware_cache = {}
         self._headset_audio = None
         self._apply_jobs = {}
+        self.monitor = monitor.MicMonitor()
         self.tray = None
         self.low_warned = set()
         self.osd = DpiOsd(self)
@@ -930,6 +939,28 @@ class App(ctk.CTk):
                 self._headset_audio = (None, None)
         return self._headset_audio
 
+    def sync_sidetone(self, device):
+        """Applique le retour micro choisi : celui du casque, ou celui de RazerLite (le casque coupe alors le sien)."""
+        side = self.device_settings(device).get("audio", {}).get("sidetone", {})
+        on, level = bool(side.get("on")), int(side.get("level", 50))
+        if side.get("mode") == "app":
+            device.set_sidetone(False, level)
+            if on:
+                try:
+                    self.monitor.start(level)
+                    self.monitor.error = None
+                except RuntimeError as exc:
+                    self.monitor.error = str(exc)
+                    self.status(f"Retour micro RazerLite : {exc}", True)
+            else:
+                self.monitor.stop()
+        else:
+            self.monitor.stop()
+            device.set_sidetone(on, level)
+        page = self.pages.get("Audio") if device is self.current else None
+        if page is not None and hasattr(page, "show_sidetone_info"):
+            page.show_sidetone_info()
+
     def apply_audio(self, device):
         key = (device.name, "audio")
         if key in self._apply_jobs:
@@ -1092,8 +1123,7 @@ class App(ctk.CTk):
             elif what == "brightness":
                 device.set_brightness(int(s.get("brightness", 100)))
             elif what == "sidetone":
-                side = s.get("audio", {}).get("sidetone", {})
-                device.set_sidetone(side.get("on", False), side.get("level", 50))
+                self.sync_sidetone(device)
             elif what == "dpi":
                 stages = s["dpi_stages"][:5] or [800]
                 active = max(1, min(len(stages), int(s.get("active_stage", 1))))
@@ -1114,6 +1144,12 @@ class App(ctk.CTk):
 
     def apply_all(self):
         errors = profiles.apply_profile(self.devices, profiles.active_profile(self.cfg))
+        for d in self.devices:
+            if hasattr(d, "set_sidetone"):
+                try:
+                    self.sync_sidetone(d)
+                except RazerError:
+                    pass
         self.status("\n".join(errors) if errors else f"Profil « {self.cfg['active']} » appliqué.", bool(errors))
 
     # --- suivi DPI et batterie ---
@@ -1280,6 +1316,7 @@ class App(ctk.CTk):
             except Exception:
                 pass
             self.tray.stop()
+        self.monitor.stop()
         for d in self.devices:
             d.close()
         self.destroy()

@@ -121,6 +121,7 @@ L'onglet **Audio** du Kraken règle :
 
 - le volume du casque et la sensibilité du micro, avec la sourdine ;
 - le **retour micro** (activé, niveau 0 à 100 %), fait par le casque lui-même comme dans Synapse : commande relevée dans une capture USB de Synapse ;
+  au choix **Casque** (retour du firmware, retardé depuis la 1.07.04) ou **RazerLite (faible délai)** : le PC capte le micro et le renvoie dans le casque en WASAPI, le délai mesuré s'affiche. Laisser « Écouter ce périphérique » décoché dans Windows ;
 - un égaliseur 10 bandes, avec des préréglages proches de ceux de Synapse (Jeu, Film, Musique, Basses+, Voix) ;
 - le nettoyage de la voix :
   - **Suppression de bruit** retire le clavier, la souris, le souffle et le ventilateur (filtre libre RNNoise, téléchargé automatiquement) ;

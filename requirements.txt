@@ -3,3 +3,4 @@ customtkinter>=5.2
 pystray>=0.19
 pillow>=10
 comtypes>=1.4; sys_platform == "win32"
+sounddevice>=0.5; sys_platform == "win32"

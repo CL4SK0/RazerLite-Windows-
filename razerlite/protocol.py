@@ -296,18 +296,6 @@ def kraken_sidetone(enabled, level):
     return bytes((KRAKEN_SIDETONE_REPORT, 0x01, 0x01, 1 if enabled else 0, max(0, min(100, int(level)))))
 
 
-# Variantes à essayer pour retrouver un éventuel retour micro matériel caché dans le firmware 1020.
-# Seuls « 70 01 01 » est connu (capture de Synapse) ; les deux octets suivant 0x70 ont un rôle inconnu.
-SIDETONE_LAB = (
-    ("A", "70 01 00"), ("B", "70 01 02"), ("C", "70 01 03"),
-    ("D", "70 00 01"), ("E", "70 02 01"), ("F", "70 03 01"),
-)
-
-
-def kraken_sidetone_variant(prefix_hex, level):
-    return bytes.fromhex(prefix_hex) + bytes((1, max(0, min(100, int(level)))))
-
-
 # --- Mode de l'appareil et molette ------------------------------------------
 
 DEVICE_MODE_NORMAL = 0x00   # le firmware gère lui-même les boutons DPI

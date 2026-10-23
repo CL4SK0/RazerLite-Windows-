@@ -133,7 +133,9 @@ def apply_device(device, settings: dict):
         attempt("veille", device.set_idle_time, int(settings["idle_time"]))
     sidetone = settings.get("audio", {}).get("sidetone")
     if sidetone and hasattr(device, "set_sidetone"):
-        attempt("retour micro", device.set_sidetone, sidetone.get("on", False), sidetone.get("level", 50))
+        # en mode RazerLite, c'est le PC qui fait le retour : le casque coupe le sien
+        on = sidetone.get("on", False) and sidetone.get("mode", "headset") != "app"
+        attempt("retour micro", device.set_sidetone, on, sidetone.get("level", 50))
     return errors
 
 
