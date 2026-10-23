@@ -6,4 +6,4 @@ Projet indépendant, sans lien avec Razer.
 
 **Télécharger :** prends `RazerLite.exe` dans la dernière [version publiée](../../releases/latest). L'appli se met ensuite à jour toute seule.
 
-Mode d'emploi complet : [GUIDE.md](GUIDE.md).
+Mode d'emploi complet : [GUIDE.md](GUIDE.md). Ce que gère la dernière version, appareil par appareil, avec les aperçus : [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md).
