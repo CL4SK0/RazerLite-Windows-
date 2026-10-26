@@ -8,7 +8,7 @@ RazerLite v0.5.22 remplace Razer Synapse sous Windows pour trois appareils : la 
 
 - **Installation** : télécharger `RazerLite.exe` dans la [dernière version](../../../releases/latest). Il marche sans Python. La version Python (`RazerLite-pack.zip`, `install.bat`) reste disponible.
 - **Synapse** : il doit être coupé, car les deux logiciels ne peuvent pas parler aux appareils en même temps. `synapse-off.bat` l'arrête proprement et `synapse-on.bat` le remet.
-- **Mises à jour** : chaque modification publiée sur le dépôt produit une version `0.5.N`. L'appli vérifie au démarrage puis toutes les 6 heures. Un bandeau propose « Mettre à jour », qui télécharge, remplace et relance l'appli. Les profils sont gardés dans `%APPDATA%\RazerLite`.
+- **Mises à jour** : chaque modification publiée sur le dépôt produit une version `0.5.N`. L'appli vérifie au démarrage puis toutes les 6 heures. Le bouton « Rechercher une mise à jour », en bas à gauche de la fenêtre, vérifie à la demande. Un bandeau propose « Mettre à jour », qui télécharge, remplace et relance l'appli. Les profils sont gardés dans `%APPDATA%\RazerLite`.
 - **Fonctionnement** : tout s'applique en direct et s'enregistre dans le profil actif, sans bouton « Appliquer ». Fermer la fenêtre la cache seulement dans la barre des tâches.
 - **Diagnostic** : `diag.bat` produit `razerlite-diag.txt`, qui liste ce que Windows voit et la réponse de chaque appareil.
 

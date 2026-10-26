@@ -96,7 +96,7 @@ Pour un `.exe` sans Python, lance **build-exe.bat**. Le fichier sort dans `dist\
 
 - **Mettre à jour** télécharge la nouvelle version, remplace l'ancienne et relance l'appli. Tes profils sont conservés (ils sont dans `%APPDATA%\RazerLite`).
 - **Plus tard** cache le bandeau jusqu'au prochain lancement.
-- Dans l'icône de la barre des tâches, **Rechercher une mise à jour** vérifie à la demande.
+- **Rechercher une mise à jour**, en bas à gauche de la fenêtre (ou dans l'icône de la barre des tâches), vérifie à la demande. La réponse s'affiche en bas de la fenêtre.
 
 Mise en place (une seule fois) :
 

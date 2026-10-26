@@ -827,6 +827,8 @@ class App(ctk.CTk):
                                         profiles.autostart_enabled())
         sw.pack(anchor="w", pady=3)
         button(bottom, "↻  Rechercher les appareils", self.scan, height=32).pack(fill="x", pady=(14, 0))
+        self.update_button = button(bottom, "⇩  Rechercher une mise à jour", lambda: self.check_updates(True), height=32)
+        self.update_button.pack(fill="x", pady=(6, 0))
         ctk.CTkLabel(bottom, text=f"version {__version__}", font=font(10), text_color=t.FAINT).pack(pady=(10, 0))
 
         main = ctk.CTkFrame(self, fg_color="transparent")
@@ -886,8 +888,10 @@ class App(ctk.CTk):
             self.after(6 * 3600 * 1000, self.check_updates)
         if not updater.repo():
             if manual:
-                self.notify("Mises à jour non configurées (dépôt GitHub inconnu).")
+                self.tell_update("Mises à jour non configurées (dépôt GitHub inconnu).")
             return
+        if manual:
+            self.update_button.configure(state="disabled", text="Recherche en cours…")
 
         def work():
             try:
@@ -898,15 +902,26 @@ class App(ctk.CTk):
 
         threading.Thread(target=work, daemon=True).start()
 
+    def tell_update(self, text):
+        """Réponse à une recherche demandée : dans la fenêtre si elle est ouverte, sinon en notification."""
+        if self.winfo_viewable():
+            self.status(text)
+        else:
+            self.notify(text)
+
     def on_update_checked(self, info, manual):
+        if manual:
+            self.update_button.configure(state="normal", text="⇩  Rechercher une mise à jour")
         if isinstance(info, Exception):
             if manual:
-                self.notify("Impossible de vérifier les mises à jour (connexion ?).")
+                self.tell_update("Impossible de vérifier les mises à jour (connexion ?).")
             return
         if not info:
             if manual:
-                self.notify(f"RazerLite est à jour (version {__version__}).")
+                self.tell_update(f"RazerLite est à jour (version {__version__}).")
             return
+        if manual:
+            self.status(f"Nouvelle version {info['version']} disponible : clique sur « Mettre à jour » en haut.")
         first = not self.update_info or self.update_info["version"] != info["version"]
         self.update_info = info
         notes = info["notes"].splitlines()[0] if info["notes"] else ""
